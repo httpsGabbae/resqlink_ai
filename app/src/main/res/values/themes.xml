@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.ResQLinkAI" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#081226</item>
+        <item name="android:colorBackground">#081226</item>
+        <item name="android:statusBarColor">#081226</item>
+        <item name="android:navigationBarColor">#101C36</item>
+    </style>
+</resources>

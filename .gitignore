@@ -1,0 +1,136 @@
+# ====================================================================
+# ResQLink AI - Root Git Ignore Configuration
+# Comprehensive protection for Android, Next.js Web Portal, & Secrets
+# ====================================================================
+
+# --------------------------------------------------------------------
+# 1. SECURITY & SENSITIVE CREDENTIALS (NEVER COMMIT SECRETS)
+# --------------------------------------------------------------------
+# Environment variables containing API keys, database URLs, tokens
+*.env
+*.env.*
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+**/.env
+**/.env.*
+!**/.env.example
+
+# Android & Local Machine SDK configurations
+local.properties
+/local.properties
+**/local.properties
+secrets.properties
+**/secrets.properties
+signing.properties
+**/signing.properties
+
+# Cloud, Firebase & Google service credentials
+google-services.json
+**/google-services.json
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+credentials.json
+**/credentials*.json
+service-account*.json
+**/service-account*.json
+
+# Keystores, Signing Keys, Certificates & Private Keys
+*.jks
+*.keystore
+*.key
+*.pem
+*.p8
+*.p12
+*.cer
+*.crt
+**/signing/
+
+# --------------------------------------------------------------------
+# 2. NEXT.JS / NODE.JS (WEBSITE DIRECTORY)
+# --------------------------------------------------------------------
+# Dependencies
+node_modules/
+**/node_modules/
+.pnp
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Next.js build output and caches
+.next/
+**/.next/
+out/
+**/out/
+.vercel/
+**/.vercel/
+
+# TypeScript build cache
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+
+# NPM / Yarn / PNPM logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --------------------------------------------------------------------
+# 3. ANDROID & GRADLE BUILD ARTIFACTS
+# --------------------------------------------------------------------
+# Gradle files and caches
+.gradle/
+**/.gradle/
+build/
+**/build/
+app/build/
+.kotlin/
+**/.kotlin/
+
+# Android Studio / IntelliJ IDE files
+*.iml
+**/*.iml
+.idea/
+**/.idea/
+.idea/caches
+.idea/libraries
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# Native build artifacts
+.externalNativeBuild
+.externalNativeBuild/
+.cxx
+.cxx/
+captures/
+**/captures/
+
+# Intermediate / Debug APK binaries in root (Release download APK in website/public/downloads is retained)
+app-debug.apk
+/app-debug.apk
+
+# --------------------------------------------------------------------
+# 4. OPERATING SYSTEM & EDITOR ARTIFACTS
+# --------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Tt]humbs.db
+*.swp
+*.swo
+*~
+*.bak
+.vscode/

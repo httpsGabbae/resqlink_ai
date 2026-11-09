@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  --color-crimson: #D62839;
+  --color-crimson-hover: #BF2030;
+  --color-crimson-active: #9E1927;
+  --color-crimson-light: #F8E8EA;
+  --color-ink: #17212D;
+  --color-ink-muted: #2A3644;
+  --color-ink-light: #3D4A59;
+  --color-porcelain: #FAF9F7;
+  --color-porcelain-alt: #F3F1EC;
+  --color-porcelain-border: #E8E5DD;
+  --color-frosted-rose: #F8E8EA;
+  --color-slate-gray: #667085;
+  --color-slate-gray-light: #98A2B3;
+  --color-rescue-green: #187A61;
+  --color-rescue-green-light: #E7F6F1;
+  --color-rescue-amber: #D97706;
+  --color-rescue-amber-light: #FEF3C7;
+
+  --font-manrope: var(--font-manrope), sans-serif;
+  --font-inter: var(--font-inter), sans-serif;
+}
+
+:root {
+  --background: #FAF9F7;
+  --foreground: #17212D;
+}
+
+* {
+  border-color: #E8E5DD;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+body {
+  background-color: #FAF9F7;
+  color: #17212D;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-manrope), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* Accessibility Focus Outline */
+:focus-visible {
+  outline: 2px solid #D62839;
+  outline-offset: 2px;
+}
+
+/* Custom Lifeline Pulse Keyframes */
+@keyframes lifeline-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 12px rgba(214, 40, 57, 0.45));
+  }
+}
+
+@keyframes signal-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(214, 40, 57, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(214, 40, 57, 0);
+  }
+}
+
+@keyframes safe-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(24, 122, 97, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(24, 122, 97, 0);
+  }
+}
+
+.animate-lifeline-pulse {
+  animation: lifeline-pulse 3s infinite ease-in-out;
+}
+
+.animate-signal-glow {
+  animation: signal-glow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.animate-safe-glow {
+  animation: safe-glow 2.5s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Reduced Motion Safety Guarantee */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

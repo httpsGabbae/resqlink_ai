@@ -1,0 +1,4317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ResQLink AI — Laptop Browser Preview</title>
+  <link rel="icon" type="image/png" href="app/src/main/res/mipmap-xxhdpi/ic_launcher.png">
+  <!-- Interactive Leaflet Dark Map Dependencies -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background: #020617;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 12px;
+      color: #F8FAFC;
+    }
+
+    .instructions-bar {
+      margin-bottom: 16px;
+      text-align: center;
+      max-width: 440px;
+    }
+
+    .instructions-bar h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #F8FAFC;
+    }
+
+    .instructions-bar p {
+      font-size: 13px;
+      color: #94A3B8;
+      margin-top: 4px;
+      line-height: 18px;
+    }
+
+    /* Mobile Frame */
+    .phone-container {
+      width: 390px;
+      height: 840px;
+      background: #081226;
+      border-radius: 46px;
+      border: 10px solid #1e293b;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(229, 57, 53, 0.15);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 38px;
+      padding: 10px 24px 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #94A3B8;
+      background: transparent;
+      z-index: 10;
+    }
+
+    .status-notch {
+      width: 110px;
+      height: 20px;
+      background: #1e293b;
+      border-bottom-left-radius: 12px;
+      border-bottom-right-radius: 12px;
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    /* View containers */
+    .view-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    .view-screen::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* ================= LOGIN VIEW ================= */
+    .login-container {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+    }
+
+    .login-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 24px;
+      text-align: center;
+    }
+
+    .login-logo {
+      width: 90px;
+      height: 90px;
+      border-radius: 22px;
+      border: 2px solid rgba(255, 51, 75, 0.6);
+      object-fit: cover;
+      box-shadow: 0 10px 30px rgba(229, 57, 53, 0.25);
+    }
+
+    .login-title {
+      font-size: 26px;
+      font-weight: 900;
+      color: #F8FAFC;
+      letter-spacing: 0.5px;
+      margin-top: 14px;
+    }
+
+    .login-sub {
+      font-size: 13px;
+      color: #94A3B8;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    .features-card {
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 24px;
+      width: 100%;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: #F8FAFC;
+      font-weight: 500;
+    }
+
+    .feature-icon {
+      color: #10B981;
+      font-size: 14px;
+    }
+
+    .btn-google {
+      width: 100%;
+      height: 52px;
+      background: #FFFFFF;
+      color: #1E293B;
+      border-radius: 14px;
+      border: none;
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+      transition: transform 0.15s;
+    }
+
+    .btn-google:active { transform: scale(0.97); }
+
+    .google-g {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #4285F4;
+      color: white;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+
+    .btn-guest {
+      width: 100%;
+      height: 50px;
+      background: transparent;
+      color: #F8FAFC;
+      border: 1px solid #263964;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.2s;
+    }
+
+    .btn-guest:hover {
+      background: #101C36;
+      border-color: #F59E0B;
+    }
+
+    .btn-guest:active { transform: scale(0.97); }
+
+    .login-footer-note {
+      font-size: 11px;
+      color: #94A3B8;
+      text-align: center;
+      margin-top: 12px;
+      line-height: 15px;
+    }
+
+    /* ================= HOME VIEW ================= */
+    .home-content {
+      padding: 10px 18px 75px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Brand Header */
+    .brand-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4px;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1.5px solid #263964;
+      object-fit: cover;
+    }
+
+    .brand-text h2 {
+      font-size: 22px;
+      font-weight: 900;
+      color: #F8FAFC;
+      letter-spacing: 0.5px;
+    }
+
+    .top-settings-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #162544;
+      border: 1px solid #263964;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .top-settings-btn:hover {
+      background: #1E2D4E;
+      transform: rotate(30deg);
+    }
+
+    /* Minimal GPS Badge */
+    .gps-minimal-badge {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 20px;
+      padding: 6px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #F8FAFC;
+    }
+
+    .gps-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      display: inline-block;
+      margin-right: 8px;
+      position: relative;
+      animation: beaconPulse 1.5s infinite ease-out;
+    }
+
+    @keyframes beaconPulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 9px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .gps-refresh-btn {
+      cursor: pointer;
+      display: inline-block;
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .gps-refresh-btn:active {
+      transform: rotate(360deg);
+    }
+
+    /* Guardian Always Listening Bar */
+    .guardian-home-bar {
+      background: #101C36;
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      border-radius: 12px;
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .guardian-home-bar:hover {
+      border-color: #10B981;
+    }
+    .guardian-home-bar.paused {
+      border-color: #263964;
+    }
+    .guardian-listening-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 8px #10B981;
+      animation: pulseListeningDot 1.6s infinite ease-in-out;
+    }
+    .guardian-listening-dot.paused {
+      background: #94A3B8;
+      box-shadow: none;
+      animation: none;
+    }
+    @keyframes pulseListeningDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
+    }
+
+    /* Two-Card Grid */
+    .two-card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-card {
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 16px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 172px;
+      transition: transform 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+
+    .grid-card:hover {
+      transform: translateY(-2px);
+      border-color: #3b5288;
+    }
+
+    .card-label {
+      font-size: 10px;
+      font-weight: 800;
+      color: #94A3B8;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Real Map Preview Container */
+    .mini-map-box {
+      height: 72px;
+      background: #081226;
+      border: 1px solid #263964;
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .map-radar-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at center, rgba(8, 18, 38, 0.25) 0%, rgba(8, 18, 38, 0.70) 100%);
+      pointer-events: none;
+    }
+
+    .map-pill-action {
+      margin-top: 4px;
+      background: rgba(255, 51, 75, 0.16);
+      border: 1px solid rgba(255, 51, 75, 0.55);
+      border-radius: 8px;
+      padding: 4px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .map-pill-action:hover {
+      background: rgba(255, 51, 75, 0.26);
+    }
+
+    .radar-preview-wrap {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #081226;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .radar-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(38, 57, 100, 0.7);
+    }
+    .radar-ring-1 { width: 28px; height: 28px; }
+    .radar-ring-2 { width: 56px; height: 56px; }
+    .radar-ring-3 { width: 84px; height: 84px; border-color: rgba(255, 51, 75, 0.35); }
+    .radar-crosshair-h { position: absolute; left: 0; right: 0; height: 1px; background: rgba(38, 57, 100, 0.4); }
+    .radar-crosshair-v { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(38, 57, 100, 0.4); }
+    .radar-sweep-cone {
+      position: absolute;
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, rgba(255, 51, 75, 0.35) 0deg, rgba(255, 51, 75, 0.0) 60deg, transparent 60deg);
+      animation: radarRotate 3.5s linear infinite;
+    }
+    .radar-center-beacon {
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #FF334B;
+      box-shadow: 0 0 8px #FF334B;
+      z-index: 2;
+    }
+    .radar-station-dot {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      z-index: 2;
+    }
+    .radar-station-dot.hosp { background: #E53935; box-shadow: 0 0 6px #E53935; top: 22%; left: 68%; }
+    .radar-station-dot.pol { background: #1E88E5; box-shadow: 0 0 6px #1E88E5; top: 72%; left: 30%; }
+    .radar-station-dot.fire { background: #FB8C00; box-shadow: 0 0 6px #FB8C00; top: 38%; left: 24%; }
+    @keyframes radarRotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .map-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      filter: saturate(1.2) contrast(1.1);
+      pointer-events: none;
+    }
+
+    .map-overlay-badge {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      background: rgba(16, 28, 54, 0.85);
+      border: 1px solid #263964;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 8px;
+      font-weight: 800;
+      color: #10B981;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      backdrop-filter: blur(2px);
+    }
+
+    .map-hospital-pin {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      background: #1B5E20;
+      color: white;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 8px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .card-subtext {
+      font-size: 11px;
+      font-weight: 700;
+      color: #F8FAFC;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dist-tag {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10B981;
+      font-size: 9px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      animation: pulseDist 1.2s infinite alternate ease-in-out;
+    }
+
+    @keyframes pulseDist {
+      from { transform: scale(0.95); opacity: 0.85; }
+      to { transform: scale(1.05); opacity: 1; }
+    }
+
+    .station-call-btn-mini {
+      background: #1B5E20;
+      border: none;
+      border-radius: 8px;
+      padding: 6px;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .station-call-btn-mini:hover {
+      background: #2E7D32;
+      transform: scale(1.02);
+    }
+
+    /* Emergency Routing Priority Pill */
+    .priority-routing-pill {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .priority-routing-pill:hover {
+      border-color: #FF334B;
+      background: #142240;
+    }
+
+    /* Big SOS Button with Concentric Ripples */
+    .sos-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 2px 0;
+    }
+
+    .sos-outer-ring {
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: rgba(229, 57, 53, 0.18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulseGlowOuter 2s infinite ease-in-out;
+    }
+
+    .sos-middle-ring {
+      width: 155px;
+      height: 155px;
+      border-radius: 50%;
+      background: rgba(255, 51, 75, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulseGlowMiddle 2s infinite ease-in-out 0.2s;
+    }
+
+    .sos-core-btn {
+      width: 125px;
+      height: 125px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #FF334B, #C62828 70%, #8E0000);
+      box-shadow: 0 10px 25px rgba(255, 42, 77, 0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .sos-core-btn:active { transform: scale(0.92); }
+
+    .sos-core-btn svg { width: 32px; height: 32px; fill: #FFFFFF; }
+    .sos-label { font-size: 24px; font-weight: 900; color: #FFFFFF; letter-spacing: 2px; line-height: 26px; }
+    .sos-sublabel { font-size: 10px; font-weight: 800; color: rgba(255, 255, 255, 0.85); letter-spacing: 1px; }
+
+    @keyframes pulseGlowOuter {
+      0%, 100% { transform: scale(1); background: rgba(229, 57, 53, 0.14); }
+      50% { transform: scale(1.08); background: rgba(229, 57, 53, 0.36); }
+    }
+
+    @keyframes pulseGlowMiddle {
+      0%, 100% { transform: scale(1); background: rgba(255, 51, 75, 0.26); }
+      50% { transform: scale(1.05); background: rgba(255, 51, 75, 0.42); }
+    }
+
+    /* Slider Button with Animated Light Shimmer Beam */
+    .slider-track {
+      width: 100%;
+      height: 56px;
+      background: #162544;
+      border-radius: 28px;
+      position: relative;
+      overflow: hidden;
+      padding: 3px;
+      display: flex;
+      align-items: center;
+      border: 1px solid #263964;
+    }
+
+    .slider-track::after {
+      content: "";
+      position: absolute;
+      top: 0; left: -100%; width: 60%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+      animation: slideShimmer 2.2s infinite ease-in-out;
+      pointer-events: none;
+    }
+
+    @keyframes slideShimmer {
+      0% { left: -70%; }
+      100% { left: 160%; }
+    }
+
+    .slider-fill {
+      position: absolute;
+      left: 0; top: 0; bottom: 0; width: 0%;
+      background: linear-gradient(90deg, #B71C1C, #E53935, #FF5252);
+      border-radius: 28px;
+      transition: width 0.05s ease-out;
+      pointer-events: none;
+    }
+
+    .slider-text {
+      width: 100%;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 1.1px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .slider-thumb {
+      width: 50px;
+      height: 50px;
+      background: #FFFFFF;
+      border-radius: 50%;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      position: absolute;
+      left: 3px;
+      z-index: 3;
+    }
+
+    .slider-thumb:active { cursor: grabbing; box-shadow: 0 6px 18px rgba(229, 57, 53, 0.6); }
+    .slider-thumb svg { width: 22px; height: 22px; fill: #D32F2F; }
+
+    /* ================= BASIC EMERGENCY MEDICAL ID CARD ================= */
+    .medical-id-card {
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 18px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .medical-id-card:hover {
+      border-color: #3b5288;
+      transform: translateY(-2px);
+    }
+
+    .medical-id-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .medical-id-title-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .medical-icon-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(229, 57, 53, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FF334B;
+      font-size: 16px;
+      animation: cardiacHeartbeat 1.4s infinite ease-in-out;
+    }
+
+    @keyframes cardiacHeartbeat {
+      0% { transform: scale(1); }
+      14% { transform: scale(1.18); }
+      28% { transform: scale(1); }
+      42% { transform: scale(1.14); }
+      70% { transform: scale(1); }
+      100% { transform: scale(1); }
+    }
+
+    .medical-badges-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .med-pill {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .med-pill-label { font-size: 9px; font-weight: 800; color: #94A3B8; letter-spacing: 0.5px; }
+    .med-pill-val { font-size: 13px; font-weight: 800; color: #F8FAFC; margin-top: 2px; }
+    .med-pill-val.blood { color: #FF334B; font-size: 15px; font-weight: 900; }
+
+    .med-ice-row {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 10px;
+      padding: 6px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    /* ================= SETTINGS VIEW ================= */
+    .settings-content {
+      padding: 16px 20px 80px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .settings-topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 4px;
+    }
+
+    .btn-back {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #162544;
+      border: 1px solid #263964;
+      color: #F8FAFC;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .btn-back:hover {
+      background: #1E2D4E;
+      transform: translateX(-2px);
+    }
+
+    .settings-heading {
+      font-size: 20px;
+      font-weight: 900;
+      color: #F8FAFC;
+      letter-spacing: 0.5px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #94A3B8;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+
+    /* Clean Category Menu Items */
+    .menu-item-row {
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .menu-item-row:hover {
+      background: #1A2C52;
+      border-color: #3b5288;
+      transform: translateX(3px);
+    }
+
+    .menu-item-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .menu-item-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: #101C36;
+      border: 1px solid #263964;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .menu-item-title { font-size: 14px; font-weight: 800; color: #F8FAFC; }
+    .menu-item-subtitle { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+
+    .menu-item-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-pill {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #101C36;
+      border: 1px solid #263964;
+      color: #94A3B8;
+    }
+
+    .badge-pill.active {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10B981;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .badge-pill.priority {
+      background: rgba(229, 57, 53, 0.2);
+      color: #FF334B;
+      border-color: rgba(229, 57, 53, 0.4);
+    }
+
+    .chevron { color: #94A3B8; font-size: 16px; font-weight: 800; }
+
+    /* Sub-section views */
+    .sub-section-container {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      animation: slideInSub 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    #settingsMainMenu { animation: fadeInMain 0.24s ease-out forwards; }
+
+    @keyframes slideInSub {
+      from { opacity: 0; transform: translateX(24px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes fadeInMain {
+      from { opacity: 0; transform: translateX(-16px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .sub-section-card {
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* Option Card for Call Priority */
+    .priority-option-card {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .priority-option-card.selected {
+      border-color: #FF334B;
+      background: #142240;
+    }
+
+    .priority-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #94A3B8;
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .priority-option-card.selected .priority-radio {
+      border-color: #FF334B;
+    }
+
+    .priority-radio-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #FF334B;
+      display: none;
+    }
+
+    .priority-option-card.selected .priority-radio-dot {
+      display: block;
+    }
+
+    /* Guardian Audio Visualizer Bars */
+    .acoustic-bar-box {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .voice-visualizer {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      height: 28px;
+    }
+
+    .wave-bar {
+      width: 4px;
+      background: #10B981;
+      border-radius: 2px;
+      height: 6px;
+      animation: waveBounce 0.75s infinite ease-in-out alternate;
+    }
+
+    .wave-bar:nth-child(1) { animation-duration: 0.42s; }
+    .wave-bar:nth-child(2) { animation-duration: 0.62s; animation-delay: 0.08s; }
+    .wave-bar:nth-child(3) { animation-duration: 0.36s; animation-delay: 0.16s; }
+    .wave-bar:nth-child(4) { animation-duration: 0.7s; animation-delay: 0.04s; }
+    .wave-bar:nth-child(5) { animation-duration: 0.48s; animation-delay: 0.12s; }
+    .wave-bar:nth-child(6) { animation-duration: 0.64s; animation-delay: 0.2s; }
+    .wave-bar:nth-child(7) { animation-duration: 0.38s; animation-delay: 0.08s; }
+
+    @keyframes waveBounce {
+      0% { height: 6px; }
+      100% { height: 26px; }
+    }
+
+    .input-group { display: flex; flex-direction: column; gap: 4px; }
+    .input-label { font-size: 11px; font-weight: 700; color: #94A3B8; }
+    .input-field {
+      background: #101C36;
+      border: 1px solid #263964;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #F8FAFC;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus { border-color: #FF334B; }
+
+    .btn-save-sub {
+      background: #E53935;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      height: 46px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 6px;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .btn-save-sub:hover { background: #FF334B; }
+    .btn-save-sub:active { transform: scale(0.97); }
+
+    /* Bottom Log Out Button */
+    .btn-logout-bottom {
+      width: 100%;
+      height: 50px;
+      background: #162544;
+      border: 1px solid rgba(229, 57, 53, 0.4);
+      border-radius: 14px;
+      color: #FF334B;
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      margin-top: 24px;
+      transition: all 0.2s;
+    }
+    .btn-logout-bottom:hover {
+      background: rgba(229, 57, 53, 0.15);
+      border-color: #FF334B;
+      transform: translateY(-2px);
+    }
+    .btn-logout-bottom:active { transform: scale(0.97); }
+
+    /* Bottom Navigation Bar */
+    .bottom-nav {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 62px;
+      background: #101C36;
+      border-top: 1px solid #263964;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 0 16px;
+      z-index: 10;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      color: #94A3B8;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .nav-item:active { transform: scale(0.92); }
+    .nav-item.active { color: #FF334B; font-weight: 800; }
+    .nav-item svg { width: 20px; height: 20px; fill: currentColor; }
+
+    /* Category Filter Chips */
+    .chip-filter {
+      padding: 6px 12px;
+      border-radius: 10px;
+      background: #162544;
+      border: 1px solid #263964;
+      color: #F8FAFC;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .chip-filter.active {
+      background: #E53935;
+      border-color: #FF334B;
+      color: #FFFFFF;
+    }
+
+    /* Full-Screen Emergency HUD */
+    .emergency-hud {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #8E0000;
+      z-index: 100;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 40px 24px 30px 24px;
+      text-align: center;
+      animation: fadeInHud 0.2s ease-out;
+    }
+
+    @keyframes fadeInHud {
+      from { opacity: 0; transform: scale(1.04); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .emergency-hud.show { display: flex; }
+    .hud-title { font-size: 22px; font-weight: 900; color: #FFFFFF; }
+    .hud-subtitle { font-size: 14px; color: rgba(255, 255, 255, 0.9); margin-top: 6px; }
+
+    .hud-countdown-ring {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+      border: 3px solid rgba(255, 255, 255, 0.4);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      font-weight: 900;
+      color: #FFFFFF;
+      animation: countdownThump 1s infinite;
+    }
+
+    @keyframes countdownThump {
+      0%, 100% { transform: scale(1); }
+      15% { transform: scale(1.08); }
+    }
+
+    .hud-action-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.15s;
+    }
+    .hud-action-btn:active { transform: scale(0.97); }
+    .hud-call-now { background: #10B981; color: #FFFFFF; border: none; margin-bottom: 10px; }
+    .hud-cancel { background: transparent; color: #FFFFFF; border: 1.5px solid #FFFFFF; }
+
+    /* ================= IN-CALL VOICE ASSIST & WAVEFORM HUD ================= */
+    .va-waveform-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 4px;
+      height: 32px;
+      margin-top: 10px;
+    }
+    .va-bar {
+      width: 4px;
+      background: #EF4444;
+      border-radius: 2px;
+      height: 8px;
+      animation: vaWave 0.8s infinite ease-in-out alternate;
+    }
+    .va-bar:nth-child(2) { animation-delay: 0.1s; height: 16px; }
+    .va-bar:nth-child(3) { animation-delay: 0.25s; height: 24px; }
+    .va-bar:nth-child(4) { animation-delay: 0.4s; height: 12px; }
+    .va-bar:nth-child(5) { animation-delay: 0.15s; height: 28px; }
+    .va-bar:nth-child(6) { animation-delay: 0.3s; height: 18px; }
+    .va-bar:nth-child(7) { animation-delay: 0.5s; height: 26px; }
+    .va-bar:nth-child(8) { animation-delay: 0.2s; height: 14px; }
+    .va-bar:nth-child(9) { animation-delay: 0.35s; height: 22px; }
+    .va-bar:nth-child(10) { animation-delay: 0.1s; height: 16px; }
+    .va-bar:nth-child(11) { animation-delay: 0.45s; height: 20px; }
+    .va-bar:nth-child(12) { animation-delay: 0.25s; height: 10px; }
+
+    @keyframes vaWave {
+      0% { transform: scaleY(0.3); }
+      100% { transform: scaleY(1.3); }
+    }
+    @keyframes vaPulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.4; }
+    }
+
+    /* ================= ANDROID HEADS-UP POP-UP NOTIFICATION ================= */
+    .heads-up-popup {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      right: 12px;
+      background: rgba(15, 23, 42, 0.97);
+      border: 1.5px solid #EF4444;
+      border-radius: 16px;
+      padding: 12px 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(239, 68, 68, 0.35);
+      z-index: 99999;
+      backdrop-filter: blur(16px);
+      transform: translateY(-135%);
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+      pointer-events: none;
+      cursor: pointer;
+    }
+    .heads-up-popup.show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .heads-up-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .heads-up-body {
+      margin-bottom: 10px;
+    }
+    .heads-up-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .heads-up-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: none;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    .heads-up-btn:active {
+      transform: scale(0.96);
+    }
+    .heads-up-btn.cancel {
+      background: #334155;
+      color: #F8FAFC;
+      border: 1px solid #475569;
+    }
+    .heads-up-btn.cancel:hover {
+      background: #475569;
+    }
+    .heads-up-btn.confirm {
+      background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+      color: #FFFFFF;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    }
+
+    /* ================= FULL 5KM EMERGENCY MAP VIEW ================= */
+    #mapView {
+      background: #081226;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .map-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #101C36;
+      border-bottom: 1px solid #263964;
+      z-index: 500;
+    }
+
+    .map-topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .map-topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .map-icon-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #162544;
+      border: 1px solid #263964;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #F8FAFC;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s ease;
+    }
+    .map-icon-btn:hover, .map-icon-btn:active {
+      background: #1e3a6c;
+      transform: scale(0.95);
+    }
+
+    .map-filter-scroll {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 8px 12px;
+      background: #081226;
+      border-bottom: 1px solid #162544;
+      scrollbar-width: none;
+      z-index: 500;
+    }
+    .map-filter-scroll::-webkit-scrollbar {
+      display: none;
+    }
+
+    .map-canvas-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      min-height: 240px;
+      overflow: hidden;
+    }
+
+    #previewLeafletMap {
+      width: 100%;
+      height: 100%;
+      background: #081226;
+    }
+
+    .map-defense-zone-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(16, 28, 54, 0.92);
+      border: 1px solid #263964;
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 800;
+      color: #F8FAFC;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 400;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    .map-bottom-carousel-container {
+      background: #0D1B2A;
+      border-top: 1px solid #263964;
+      padding: 10px 12px 14px 12px;
+      margin-bottom: 62px;
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 200px;
+    }
+
+    .map-carousel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #94A3B8;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .map-cards-row {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .map-cards-row::-webkit-scrollbar {
+      display: none;
+    }
+
+    .map-station-card {
+      min-width: 230px;
+      max-width: 250px;
+      background: #162544;
+      border: 1px solid #263964;
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    .map-station-card.selected {
+      border-color: #E53935;
+      background: #1c2e54;
+      box-shadow: 0 0 10px rgba(229, 57, 53, 0.4);
+    }
+
+    /* Dark Popups for Leaflet */
+    .leaflet-popup-content-wrapper {
+      background: #162544 !important;
+      color: #F8FAFC !important;
+      border: 1px solid #263964 !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6) !important;
+      padding: 2px !important;
+    }
+    .leaflet-popup-tip { background: #162544 !important; border: 1px solid #263964 !important; }
+    .popup-title { font-size: 12px; font-weight: 800; color: #F8FAFC; margin-bottom: 2px; }
+    .popup-cat { font-size: 9px; font-weight: 800; text-transform: uppercase; margin-bottom: 3px; }
+    .popup-dist { font-size: 10px; color: #10B981; font-weight: 700; margin-bottom: 4px; }
+    .popup-btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 5px 0;
+      background: #1B5E20;
+      color: white;
+      text-decoration: none;
+      font-size: 10px;
+      font-weight: 800;
+      border-radius: 6px;
+      margin-top: 4px;
+      border: none;
+      cursor: pointer;
+    }
+    .popup-nav-btn {
+      background: #0284C7;
+      margin-top: 4px;
+    }
+
+    /* Pulse for User Beacon */
+    .user-pulse-marker {
+      position: relative;
+    }
+    .user-pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #10B981;
+      border: 2px solid #FFFFFF;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #10B981;
+    }
+    .user-pulse-ring {
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid #10B981;
+      animation: previewMapPulse 1.8s infinite ease-out;
+    }
+    @keyframes previewMapPulse {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="instructions-bar">
+    <h1>ResQLink AI — Laptop Browser Preview</h1>
+    <p>Now featuring <strong>Accident Voice Assist & Dispatcher Handover Simulation</strong> (speaks aloud on speakerphone for unresponsive users, with smart voice handover), <strong>real GPS detection</strong>, and <strong>5km emergency interactive map</strong>!</p>
+  </div>
+
+  <div class="phone-container">
+    <div class="status-notch"></div>
+    <div class="status-bar">
+      <span id="liveClock">12:45</span>
+      <span>📶 5G • 88%</span>
+    </div>
+
+    <!-- Heads-Up Pop-Up Emergency Alert Banner (Android Notification simulation) -->
+    <div id="headsUpNotification" class="heads-up-popup" onclick="onHeadsUpClicked()">
+      <div class="heads-up-header">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 13px;">🚨</span>
+          <span style="font-size: 10px; font-weight: 800; color: #EF4444; letter-spacing: 0.5px;">RESQLINK DISTRESS CALL</span>
+        </div>
+        <span style="font-size: 9px; color: #94A3B8;">Priority Max</span>
+      </div>
+      <div class="heads-up-body">
+        <div style="font-size: 13px; font-weight: 800; color: #FFFFFF;" id="headsUpTitle">🚨 EMERGENCY DISTRESS DETECTED</div>
+        <div style="font-size: 11px; color: #CBD5E1; margin-top: 2px;" id="headsUpBody">Voice Keyword: "Resqlink Tulong!" • 10s countdown to dispatch</div>
+      </div>
+      <div class="heads-up-actions" onclick="event.stopPropagation()">
+        <button class="heads-up-btn cancel" onclick="cancelEmergencyCall(); dismissHeadsUpNotification();">
+          ✕ CANCEL
+        </button>
+        <button class="heads-up-btn confirm" onclick="confirmEmergencyCall(); dismissHeadsUpNotification();">
+          📞 CALL NOW
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= VIEW 1: LOGIN VIEW ================= -->
+    <div class="view-screen" id="loginView">
+      <div class="login-container">
+        <div class="login-hero">
+          <img src="resqlink_logo.jpg" alt="Logo" class="login-logo" onerror="this.style.display='none'">
+          <div class="login-title">ResQLink AI</div>
+          <div class="login-sub">Hands-Free Offline Emergency Response</div>
+
+          <div class="features-card">
+            <div class="feature-item">
+              <span class="feature-icon">✔</span> Offline-First: Never requires internet or data load.
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">✔</span> Hands-Free Voice SOS: Filipino & English.
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">✔</span> Real-time GPS & Pinned Emergency Map.
+            </div>
+            <div class="feature-item">
+              <span class="feature-icon">✔</span> Configurable Call Priority (Local / 911 / Family).
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <button class="btn-google" onclick="doGoogleLogin()">
+            <div class="google-g">G</div>
+            <span>Continue with Google</span>
+          </button>
+
+          <button class="btn-guest" onclick="doGuestLogin()">
+            <span>⚡</span>
+            <span>Emergency Fast-Pass (Skip Login)</span>
+          </button>
+
+          <div class="login-footer-note">
+            Login once. Your credentials stay cached offline so you are never locked out during an emergency.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VIEW 2: HOME DASHBOARD VIEW ================= -->
+    <div class="view-screen" id="homeView" style="display: none;">
+      <div class="home-content">
+
+        <!-- 1. Top Brand Header -->
+        <div class="brand-header">
+          <div class="brand-left">
+            <img src="resqlink_logo.jpg" alt="Logo" class="brand-logo" onerror="this.style.display='none'">
+            <div class="brand-text">
+              <h2>ResQLink AI</h2>
+            </div>
+          </div>
+
+          <!-- Dedicated Settings Button -->
+          <div class="top-settings-btn" onclick="openSettingsView()" title="Open Settings">
+            ⚙️
+          </div>
+        </div>
+
+        <!-- 2. Minimal GPS Active Badge with Pulsing Beacon & Real GPS Refresh -->
+        <div class="gps-minimal-badge">
+          <div style="display: flex; align-items: center;">
+            <span class="gps-dot"></span>
+            <span id="gpsBadgeText">GPS Detecting Location...</span>
+          </div>
+          <span class="gps-refresh-btn" onclick="fetchLiveLocation(true)" title="Refresh Real GPS">🔄</span>
+        </div>
+
+        <!-- 2b. Always Listening Guardian Mode Quick Bar -->
+        <div class="guardian-home-bar" id="homeGuardianBar" onclick="toggleGuardianSub(!isGuardianOn)">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="guardian-listening-dot" id="homeGuardianDot"></span>
+            <div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 11px; font-weight: 800; color: #F8FAFC;" id="homeGuardianTitle">Always Listening: ACTIVE</span>
+                <span class="badge-pill active" id="homeGuardianBadge" style="font-size: 8px; padding: 1px 5px;">ON</span>
+              </div>
+              <div style="font-size: 10px; color: #94A3B8;" id="homeGuardianSubtitle">Wake Keyword: "Resqlink Tulong!" (or super-distress "Tulong!")</div>
+            </div>
+          </div>
+          <label class="switch" style="pointer-events: none;">
+            <input type="checkbox" checked id="homeGuardianSwitch">
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <!-- 3. Two Cards: Card 1 (Live Google Maps) + Card 2 (Nearest 5km Station) -->
+        <div class="two-card-grid">
+          <!-- Card 1: Live Location & Dedicated 5km Map Screen -->
+          <div class="grid-card" onclick="openMapView()">
+            <div class="card-label">
+              <span>LIVE LOCATION</span>
+              <span style="color: #10B981;">📍 MAPS</span>
+            </div>
+            <div class="mini-map-box">
+              <iframe class="map-iframe" id="mapIframe" src="about:blank"></iframe>
+              <div class="radar-preview-wrap map-radar-overlay">
+                <div class="radar-crosshair-h"></div>
+                <div class="radar-crosshair-v"></div>
+                <div class="radar-ring radar-ring-1"></div>
+                <div class="radar-ring radar-ring-2"></div>
+                <div class="radar-ring radar-ring-3"></div>
+                <div class="radar-sweep-cone"></div>
+                <div class="radar-station-dot hosp" title="Hospital"></div>
+                <div class="radar-station-dot pol" title="Police"></div>
+                <div class="radar-station-dot fire" title="Fire"></div>
+                <div class="radar-center-beacon" title="Your GPS Location"></div>
+                <div class="map-overlay-badge">
+                  <span style="display:inline-block; width:5px; height:5px; border-radius:50%; background:#10B981;"></span>
+                  <span>Google Maps • 5km</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="card-subtext" id="cardLocationText">Detecting address...</div>
+              <div class="map-pill-action">
+                <span style="display:flex; align-items:center; gap:4px;">
+                  <svg viewBox="0 0 24 24" style="width:12px; height:12px; fill:#FF334B;"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                  <strong style="color: #F8FAFC; font-size:11px;">Full 5km Map</strong>
+                </span>
+                <span style="color: #FF334B; font-weight: 800; font-size: 10px;">OPEN ↗</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2: Nearest 5km Station -->
+          <div class="grid-card">
+            <div class="card-label">
+              <span>NEAREST 5KM</span>
+              <span class="dist-tag" id="stationDistTag">1.4km</span>
+            </div>
+            <div>
+              <div class="card-subtext" style="font-size: 11px;" id="nearestStationName">Emergency Dispatch</div>
+              <div style="font-size: 10px; color: #FF334B; font-weight: 800;" id="nearestStationHotline">Hotline: 122 / 911</div>
+            </div>
+            <button class="station-call-btn-mini" onclick="callNearestStation()">
+              <span>📞</span> Call Dispatch
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. Emergency Call Routing Status Pill (Configurable Call Priority) -->
+        <div class="priority-routing-pill" onclick="openSettingsSubSection('CALL_PRIORITY')">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="font-size: 18px;" id="priorityPillIcon">🏢</div>
+            <div>
+              <div style="font-size: 9px; font-weight: 800; color: #94A3B8; letter-spacing: 0.5px;">EMERGENCY CALL ROUTE</div>
+              <div style="font-size: 12px; font-weight: 800; color: #F8FAFC;" id="priorityPillLabel">1st: Nearest Local Station</div>
+            </div>
+          </div>
+          <span style="font-size: 11px; color: #FF334B; font-weight: 800;">Change ›</span>
+        </div>
+
+        <!-- 5. Hero Big Glowing SOS Button with Concentric Pulse -->
+        <div class="sos-hero">
+          <div class="sos-outer-ring">
+            <div class="sos-middle-ring">
+              <div class="sos-core-btn" onclick="triggerSosCountdown('Manual One-Tap SOS', 3)">
+                <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                <div class="sos-label">SOS</div>
+                <div class="sos-sublabel" id="sosCoreSublabel">TAP FOR HELP</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Draggable Slide to SOS Button with Shimmer Beam -->
+        <div class="slider-track" id="sliderTrack">
+          <div class="slider-fill" id="sliderFill"></div>
+          <div class="slider-text" id="sliderTextLabel">SLIDE TO CALL SOS  &gt;&gt;&gt;</div>
+          <div class="slider-thumb" id="sliderThumb">
+            <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+          </div>
+        </div>
+
+        <!-- 7. Basic Emergency Medical ID Card with Cardiac Pulse -->
+        <div class="medical-id-card" onclick="openSettingsSubSection('ACCOUNT_MEDICAL')">
+          <div class="medical-id-top">
+            <div class="medical-id-title-box">
+              <div class="medical-icon-badge">✚</div>
+              <div>
+                <div style="font-size: 13px; font-weight: 900; color: #F8FAFC; letter-spacing: 0.5px;">EMERGENCY MEDICAL ID</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="homeUserName">Juan Dela Cruz</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; color: #FF334B; font-size: 12px; font-weight: 800;">
+              <span>Edit</span>
+              <span>›</span>
+            </div>
+          </div>
+
+          <div class="medical-badges-grid">
+            <div class="med-pill">
+              <div class="med-pill-label">BLOOD TYPE</div>
+              <div class="med-pill-val blood" id="homeBloodType">O+</div>
+            </div>
+            <div class="med-pill">
+              <div class="med-pill-label">ALLERGIES</div>
+              <div class="med-pill-val" id="homeAllergies">Penicillin, Pollen</div>
+            </div>
+          </div>
+
+          <div class="med-ice-row">
+            <div>
+              <span style="color: #94A3B8; font-weight: 700;">ICE Contact:</span>
+              <span style="color: #F8FAFC; font-weight: 800; margin-left: 4px;" id="homeIceContact">Maria (0917-888-1234)</span>
+            </div>
+            <span style="color: #10B981; font-weight: 800; font-size: 10px;">AUTHORIZED</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Navigation -->
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6zm-1 6h2v4h-2zm0 6h2v2h-2z"/></svg>
+          <span>Emergency</span>
+        </div>
+        <div class="nav-item" onclick="openMapView()">
+          <svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+          <span>5km Map</span>
+        </div>
+        <div class="nav-item" onclick="openDirectoryView()">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span>Hotlines</span>
+        </div>
+        <div class="nav-item" onclick="openSettingsSubSection('PHONEBOOK')">
+          <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          <span>Contacts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VIEW 4: 5KM LOCAL HOTLINES DIRECTORY VIEW ================= -->
+    <div class="view-screen" id="directoryView" style="display: none;">
+      <div class="settings-content">
+        <!-- Directory Top Bar -->
+        <div class="settings-topbar" style="justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="btn-back" onclick="closeDirectoryView()">←</div>
+            <div>
+              <div class="settings-heading" style="font-size: 18px;">5km Local Hotlines</div>
+              <div style="font-size: 11px; color: #94A3B8;" id="dirLocationSubtitle">Detecting near GPS location...</div>
+            </div>
+          </div>
+          <button class="badge-pill active" onclick="openMapView()" style="cursor: pointer; border: none; padding: 6px 10px;">
+            <span>🗺️ 5km Map</span>
+          </button>
+        </div>
+
+        <!-- 1. AI 5km Hotline Scanner Card -->
+        <div class="sub-section-card" style="margin-top: 10px; border-color: #263964;" id="aiScanControlCard">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 38px; height: 38px; border-radius: 50%; background: #101C36; border: 1px solid #263964; display: flex; align-items: center; justify-content: center; font-size: 18px;" id="aiRadarIcon">📡</div>
+              <div>
+                <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="aiScanTitle">5km AI Hotline Scanner</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="aiScanSubtitle">Gemini 3.1 Flash-Lite • 2h Auto-Sync</div>
+              </div>
+            </div>
+            <button class="btn-primary" onclick="triggerWebAiHotlineScan()" id="btnTriggerAiScan" style="padding: 7px 14px; font-size: 12px; border-radius: 10px; width: auto; font-weight: 800;">
+              ⚡ Scan AI
+            </button>
+          </div>
+        </div>
+
+        <!-- National Emergency Hotlines Banner (Kaya Natin PH Emergency Card) -->
+        <div class="sub-section-card" style="margin-top: 10px; padding: 0; overflow: hidden; border: 1.5px solid rgba(239, 68, 68, 0.6); background: #070E1E;">
+          <!-- Top Red Title Bar -->
+          <div style="background: linear-gradient(90deg, #7F1D1D 0%, #EF4444 50%, #991B1B 100%); padding: 8px 12px; text-align: center;">
+            <div style="font-size: 15px; font-weight: 900; color: #FFFFFF; letter-spacing: 0.8px;">EMERGENCY HOTLINES</div>
+            <div style="font-size: 8.5px; color: rgba(255, 255, 255, 0.9); font-weight: 700; text-transform: uppercase;">In case of emergency, you may contact the following hotline numbers</div>
+          </div>
+
+          <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <!-- 1. National Emergency Hotline -->
+            <div style="background: #0B1528; border: 1px solid #1E2D4F; border-radius: 8px; padding: 6px 10px;">
+              <div style="background: #EF4444; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; display: inline-block;">NATIONAL EMERGENCY HOTLINE</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <span style="font-size: 18px; font-weight: 900; color: #FFFFFF;">911</span>
+                <button class="badge-pill active" onclick="callStationDirect('National Emergency 911', '911')" style="cursor: pointer; border: none; padding: 4px 10px; font-weight: 800; background: #1B5E20; color: #FFFFFF;">📞 DIAL 911</button>
+              </div>
+            </div>
+
+            <!-- 2. Philippine National Police -->
+            <div style="background: #0B1528; border: 1px solid #1E2D4F; border-radius: 8px; padding: 6px 10px;">
+              <div style="background: #2563EB; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; display: inline-block;">PHILIPPINE NATIONAL POLICE</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <span style="font-size: 18px; font-weight: 900; color: #FFFFFF;">117</span>
+                <button class="badge-pill active" onclick="callStationDirect('Philippine National Police (PNP)', '117')" style="cursor: pointer; border: none; padding: 4px 10px; font-weight: 800; background: #1B5E20; color: #FFFFFF;">📞 DIAL 117</button>
+              </div>
+            </div>
+
+            <!-- 3. Philippine Red Cross -->
+            <div style="background: #0B1528; border: 1px solid #1E2D4F; border-radius: 8px; padding: 6px 10px;">
+              <div style="background: #DC2626; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; display: inline-block;">PHILIPPINE RED CROSS</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <span style="font-size: 16px; font-weight: 900; color: #FFFFFF;">143 <span style="font-size: 11px; font-weight: 600; color: #94A3B8;">or 8527-000</span></span>
+                <div style="display: flex; gap: 6px;">
+                  <button class="badge-pill active" onclick="callStationDirect('Philippine Red Cross', '143')" style="cursor: pointer; border: none; padding: 4px 8px; font-weight: 800; background: #1B5E20; color: #FFFFFF;">143</button>
+                  <button class="badge-pill" onclick="callStationDirect('Philippine Red Cross (Landline)', '02-8527-0000')" style="cursor: pointer; border: 1px solid #334155; padding: 4px 8px; font-weight: 700; background: #1E293B; color: #E2E8F0; font-size: 10px;">Landline</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. DPWH -->
+            <div style="background: #0B1528; border: 1px solid #1E2D4F; border-radius: 8px; padding: 6px 10px;">
+              <div style="background: #D97706; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 4px; display: inline-block;">DPWH (ROAD & PUBLIC WORKS)</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                <span style="font-size: 18px; font-weight: 900; color: #FFFFFF;">165-02</span>
+                <button class="badge-pill active" onclick="callStationDirect('DPWH Public Works & Road Hazards', '165-02')" style="cursor: pointer; border: none; padding: 4px 10px; font-weight: 800; background: #1B5E20; color: #FFFFFF;">📞 DIAL 165-02</button>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 4px;">
+              <span style="font-size: 10px; color: #64748B;">Source: Kaya Natin PH</span>
+              <span style="font-size: 10px; color: #10B981; font-weight: 800;">24/7 Philippines Toll-Free</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Category Filter Chips -->
+        <div style="display: flex; gap: 8px; overflow-x: auto; padding: 6px 2px; margin-top: 4px; scrollbar-width: none;">
+          <div class="chip-filter active" id="chipAll" onclick="filterDirectoryCategory('ALL')">All (5km)</div>
+          <div class="chip-filter" id="chipBarangay" onclick="filterDirectoryCategory('BARANGAY')">Barangay</div>
+          <div class="chip-filter" id="chipPolice" onclick="filterDirectoryCategory('POLICE')">Police (PNP)</div>
+          <div class="chip-filter" id="chipHospital" onclick="filterDirectoryCategory('HOSPITAL')">Hospital / ER</div>
+          <div class="chip-filter" id="chipDrrmo" onclick="filterDirectoryCategory('DRRMO')">DRRMO</div>
+          <div class="chip-filter" id="chipFire" onclick="filterDirectoryCategory('FIRE')">Fire (BFP)</div>
+        </div>
+
+        <!-- 3. Discovered Hotlines List -->
+        <div id="directoryStationsList" style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding-bottom: 24px;">
+          <!-- Dynamically populated -->
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="closeDirectoryView()">
+          <svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6zm-1 6h2v4h-2zm0 6h2v2h-2z"/></svg>
+          <span>Emergency</span>
+        </div>
+        <div class="nav-item" onclick="closeDirectoryView(); openMapView();">
+          <svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+          <span>5km Map</span>
+        </div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span>Hotlines</span>
+        </div>
+        <div class="nav-item" onclick="closeDirectoryView(); openSettingsSubSection('PHONEBOOK');">
+          <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          <span>Contacts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VIEW 5: FULL 5KM EMERGENCY MAP VIEW ================= -->
+    <div class="view-screen" id="mapView" style="display: none;">
+      <!-- 1. Map Top Header Bar -->
+      <div class="map-topbar">
+        <div class="map-topbar-left">
+          <div class="map-icon-btn" onclick="closeMapView()" title="Back to Dashboard">←</div>
+          <div style="overflow: hidden;">
+            <div style="font-size: 14px; font-weight: 900; color: #F8FAFC; white-space: nowrap;">5km Emergency Map</div>
+            <div style="font-size: 10px; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="mapViewSubtitle">Live GPS Defense Zone</div>
+          </div>
+        </div>
+        <div class="map-topbar-actions">
+          <button class="map-icon-btn" onclick="recenterPreviewMap()" title="Re-center to my GPS">🎯</button>
+          <button class="map-icon-btn" onclick="openGoogleMapsExternal()" title="Open in Google Maps">↗</button>
+        </div>
+      </div>
+
+      <!-- 2. Category Filter Chips -->
+      <div class="map-filter-scroll">
+        <div class="chip-filter active" id="mapChipALL" onclick="filterMapCategory('ALL')">All (5km)</div>
+        <div class="chip-filter" id="mapChipHOSPITAL" onclick="filterMapCategory('HOSPITAL')">🏥 Hospitals</div>
+        <div class="chip-filter" id="mapChipPOLICE" onclick="filterMapCategory('POLICE')">👮 Police</div>
+        <div class="chip-filter" id="mapChipFIRE" onclick="filterMapCategory('FIRE')">🚒 Fire</div>
+        <div class="chip-filter" id="mapChipBARANGAY" onclick="filterMapCategory('BARANGAY')">🏛️ Barangay / DRRM</div>
+        <div class="chip-filter" id="mapChipCONTACTS" onclick="filterMapCategory('CONTACTS')">👥 ICE Contacts</div>
+      </div>
+
+      <!-- 3. Interactive Leaflet Map Canvas -->
+      <div class="map-canvas-container">
+        <div id="previewLeafletMap"></div>
+        <div class="map-defense-zone-badge">
+          <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #E53935;"></span>
+          <span>5km Defense Zone</span>
+        </div>
+      </div>
+
+      <!-- 4. Bottom Detail & Horizontal Carousel -->
+      <div class="map-bottom-carousel-container">
+        <div class="map-carousel-header">
+          <span id="mapCarouselTitle">NEARBY EMERGENCY STATIONS & CONTACTS</span>
+          <span id="mapCarouselCount" style="color: #10B981;">7 found</span>
+        </div>
+        <div class="map-cards-row" id="mapCardsRow">
+          <!-- Dynamically populated station and contact cards -->
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item" onclick="closeMapView()">
+          <svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 4l7.53 13H4.47L12 6zm-1 6h2v4h-2zm0 6h2v2h-2z"/></svg>
+          <span>Emergency</span>
+        </div>
+        <div class="nav-item active">
+          <svg viewBox="0 0 24 24"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+          <span>5km Map</span>
+        </div>
+        <div class="nav-item" onclick="closeMapView(); openDirectoryView();">
+          <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+          <span>Hotlines</span>
+        </div>
+        <div class="nav-item" onclick="closeMapView(); openSettingsSubSection('PHONEBOOK');">
+          <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+          <span>Contacts</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= VIEW 3: SETTINGS VIEW ================= -->
+    <div class="view-screen" id="settingsView" style="display: none;">
+      <div class="settings-content">
+        <!-- Settings Top Bar with Back Button -->
+        <div class="settings-topbar">
+          <div class="btn-back" onclick="handleSettingsBack()">←</div>
+          <div class="settings-heading" id="settingsViewTitle">Settings</div>
+        </div>
+
+        <!-- ================= MAIN SETTINGS MENU (INFO HIDDEN UPFRONT) ================= -->
+        <div id="settingsMainMenu">
+          <div class="section-title">PREFERENCES & EMERGENCY DATA</div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+
+            <!-- Section 0: Emergency Call Routing (NEW) -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('CALL_PRIORITY')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">⚡</div>
+                <div>
+                  <div class="menu-item-title">Emergency Call Routing</div>
+                  <div class="menu-item-subtitle" id="settingsPrioritySummary">Nearest Local Station First</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="badge-pill priority">Priority</span>
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+            <!-- Section 1: Account & Medical Profile -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('ACCOUNT_MEDICAL')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">✚</div>
+                <div>
+                  <div class="menu-item-title">Account & Medical Profile</div>
+                  <div class="menu-item-subtitle" id="settingsProfileSummary">Juan Dela Cruz • Blood O+ • Allergies</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="badge-pill active">Edit</span>
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+            <!-- Section 2: Emergency Phonebook -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('PHONEBOOK')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">📖</div>
+                <div>
+                  <div class="menu-item-title">Emergency Phonebook</div>
+                  <div class="menu-item-subtitle">2 authorized contacts for GPS SMS alerts</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="badge-pill" id="settingsContactBadge">2 Contacts</span>
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+            <!-- Section 3: Permissions & Privacy -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('PERMISSIONS')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">🔒</div>
+                <div>
+                  <div class="menu-item-title">Permissions & Privacy</div>
+                  <div class="menu-item-subtitle">Microphone, Location, Telephony, SMS</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="badge-pill active">Active</span>
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+            <!-- Section 4: Guardian Voice AI -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('GUARDIAN_AI')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">🛡️</div>
+                <div>
+                  <div class="menu-item-title">Guardian Voice AI</div>
+                  <div class="menu-item-subtitle" id="settingsGuardianSummary">Listening Offline • "Resqlink Tulong!"</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="badge-pill active" id="settingsGuardianPill">ON</span>
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+            <!-- Section 5: About & Policy -->
+            <div class="menu-item-row" onclick="openSettingsSubSection('ABOUT')">
+              <div class="menu-item-left">
+                <div class="menu-item-icon">ℹ️</div>
+                <div>
+                  <div class="menu-item-title">About & Safety Policy</div>
+                  <div class="menu-item-subtitle">ResQLink AI v1.0.0 • Fail-soft dispatch rules</div>
+                </div>
+              </div>
+              <div class="menu-item-right">
+                <span class="chevron">›</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- LOGOUT MOVED TO BOTTOM PER USER REQUEST -->
+          <div class="btn-logout-bottom" onclick="doLogout()">
+            <span>🚪</span>
+            <span>Log Out of Account</span>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 0: EMERGENCY CALL ROUTING ================= -->
+        <div id="subCallPriority" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="font-size: 14px; font-weight: 800; color: #FF334B;">PRIMARY EMERGENCY SEQUENCE</div>
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px;">
+              Choose which party is called first when you speak a distress phrase or trigger SOS.
+            </p>
+
+            <!-- Option 1: Local Hotline -->
+            <div class="priority-option-card selected" id="optLocalHotline" onclick="selectCallPriority('LOCAL_HOTLINE')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Nearest Local Station (Recommended)</span>
+                  <span class="badge-pill active">Fastest</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;">
+                  Direct cellular auto-call to nearest 5km DRRMO, police, or rescue station with zero clicks.
+                </p>
+              </div>
+            </div>
+
+            <!-- Option 2: 911 -->
+            <div class="priority-option-card" id="optUniversal911" onclick="selectCallPriority('UNIVERSAL_911')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Universal 911 First</span>
+                  <span class="badge-pill priority">National</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;">
+                  Launches national 911 emergency dispatch prompt immediately.
+                </p>
+              </div>
+            </div>
+
+            <!-- Option 3: Family -->
+            <div class="priority-option-card" id="optFamilyFirst" onclick="selectCallPriority('FAMILY_FIRST')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Family / ICE Contact First</span>
+                  <span class="badge-pill">Personal</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;" id="priorityFamilyDesc">
+                  Directly auto-calls your primary contact: Maria Dela Cruz.
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Outgoing SIM Card Selection (Dual SIM) -->
+          <div class="sub-section-card" style="margin-top: 14px;">
+            <div style="font-size: 13px; font-weight: 800; color: #10B981; display: flex; align-items: center; gap: 6px;">
+              <span>📶</span> OUTGOING SIM CARD (DUAL SIM)
+            </div>
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px;">
+              Select which cellular SIM slot ResQLink AI uses when placing automatic emergency phone calls or dispatching SOS SMS alerts.
+            </p>
+
+            <!-- SIM Option 1: System Default -->
+            <div class="priority-option-card selected" id="optSimDefault" onclick="selectSimPreference('SYSTEM_DEFAULT')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;">System Default (Carrier Standard)</span>
+                  <span class="badge-pill active">Auto</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;">
+                  Follows Android OS standard telephony calling preference.
+                </p>
+              </div>
+            </div>
+
+            <!-- SIM Option 2: SIM 1 -->
+            <div class="priority-option-card" id="optSim1" onclick="selectSimPreference('SIM_1')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="sim1Label">SIM Slot 1 (Smart / Primary)</span>
+                  <span class="badge-pill priority">Slot 1</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;">
+                  Pins outgoing emergency cellular calls and SMS directly to SIM 1.
+                </p>
+              </div>
+            </div>
+
+            <!-- SIM Option 3: SIM 2 -->
+            <div class="priority-option-card" id="optSim2" onclick="selectSimPreference('SIM_2')">
+              <div class="priority-radio"><div class="priority-radio-dot"></div></div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="sim2Label">SIM Slot 2 (Globe / DITO)</span>
+                  <span class="badge-pill">Slot 2</span>
+                </div>
+                <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;">
+                  Pins outgoing emergency cellular calls and SMS directly to SIM 2.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 1: EDIT ACCOUNT & MEDICAL ================= -->
+        <div id="subAccountMedical" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="font-size: 13px; font-weight: 800; color: #FF334B;">PERSONAL & MEDICAL DETAILS</div>
+
+            <div class="input-group">
+              <label class="input-label">Full Name</label>
+              <input type="text" class="input-field" id="editName" value="Juan Dela Cruz">
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Blood Type</label>
+              <select class="input-field" id="editBloodType" style="cursor: pointer;">
+                <option value="O+" selected>O Positive (O+)</option>
+                <option value="O-">O Negative (O-)</option>
+                <option value="A+">A Positive (A+)</option>
+                <option value="A-">A Negative (A-)</option>
+                <option value="B+">B Positive (B+)</option>
+                <option value="B-">B Negative (B-)</option>
+                <option value="AB+">AB Positive (AB+)</option>
+                <option value="AB-">AB Negative (AB-)</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Known Allergies</label>
+              <input type="text" class="input-field" id="editAllergies" value="Penicillin, Pollen">
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Medical Conditions / Notes</label>
+              <input type="text" class="input-field" id="editNotes" value="Mild Asthma (Inhaler in pocket)">
+            </div>
+
+            <div style="font-size: 13px; font-weight: 800; color: #10B981; margin-top: 6px;">PRIMARY IN CASE OF EMERGENCY (ICE)</div>
+
+            <div class="input-group">
+              <label class="input-label">ICE Contact Name</label>
+              <input type="text" class="input-field" id="editIceName" value="Maria Dela Cruz">
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">ICE Contact Phone</label>
+              <input type="text" class="input-field" id="editIcePhone" value="0917-888-1234">
+            </div>
+
+            <button class="btn-save-sub" onclick="saveMedicalProfile()">
+              💾 Save Medical ID
+            </button>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 2: PHONEBOOK & CONTACTS ================= -->
+        <div id="subPhonebook" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Pre-Authorized Safety Contacts</div>
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px;">
+              If a distress hotword is detected and the 10-second countdown expires without a cancel, ResQLink dispatches an unverified SMS alert with your offline GPS coordinates to these numbers.
+            </p>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #101C36; padding: 10px 12px; border-radius: 10px; border: 1px solid #263964;">
+              <div>
+                <div style="font-size: 13px; font-weight: 800;" id="phonebookIceName">Maria Dela Cruz</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="phonebookIcePhone">Family / Spouse • 0917-888-1234</div>
+              </div>
+              <span class="badge-pill active">ICE Primary</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #101C36; padding: 10px 12px; border-radius: 10px; border: 1px solid #263964;">
+              <div>
+                <div style="font-size: 13px; font-weight: 800;">Pedro Santos</div>
+                <div style="font-size: 11px; color: #94A3B8;">Guardian • 0918-555-5678</div>
+              </div>
+              <span class="badge-pill active">Backup</span>
+            </div>
+
+            <button class="btn-guest" style="margin-top: 8px;" onclick="alert('Add Contact Dialog: Select from phone contacts or enter mobile number.')">
+              + Add New Trusted Contact
+            </button>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 3: PERMISSIONS & PRIVACY ================= -->
+        <div id="subPermissions" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Runtime Device Permissions</div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700;">Microphone (Voice SOS)</div>
+                <div style="font-size: 11px; color: #94A3B8;">Evaluated on-device in RAM only. Never uploaded.</div>
+              </div>
+              <span class="badge-pill active">Granted</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700;">Precise Location (GPS)</div>
+                <div style="font-size: 11px; color: #94A3B8;">5km spatial lookup against local SQLite station DB.</div>
+              </div>
+              <span class="badge-pill active">Granted</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700;">Cellular Telephony (ACTION_CALL)</div>
+                <div style="font-size: 11px; color: #94A3B8;">Auto-dials local DRRMO or launches 911 prompt.</div>
+              </div>
+              <span class="badge-pill active">Granted</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 700;">Direct SMS (SmsManager)</div>
+                <div style="font-size: 11px; color: #94A3B8;">Offline SMS sent to family if incapacitated.</div>
+              </div>
+              <span class="badge-pill active">Granted</span>
+            </div>
+
+            <button class="btn-guest" style="margin-top: 6px;" onclick="alert('Redirecting to Android OS System App Info.')">
+              ⚙️ Manage in Android OS Settings
+            </button>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 4: GUARDIAN VOICE AI ================= -->
+        <div id="subGuardianAi" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div style="font-size: 14px; font-weight: 800; color: #F8FAFC;">Guardian Mode State</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="subGuardianStatusDesc">Always Listening: "Tulong", "Help"</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" checked id="subGuardianSwitch" onchange="toggleGuardianSub(this.checked)">
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+
+            <!-- Acoustic VAD Active Soundwave Box -->
+            <div class="acoustic-bar-box" id="acousticBox">
+              <div>
+                <div style="font-size: 10px; font-weight: 900; color: #10B981; letter-spacing: 1px;" id="acousticTitle">ACOUSTIC VAD ACTIVE</div>
+                <div style="font-size: 10px; color: #94A3B8;" id="acousticDesc">16kHz Mono Stream Monitored</div>
+              </div>
+              <div class="voice-visualizer" id="voiceVisualizer">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+              </div>
+            </div>
+
+            <div style="height: 1px; background: #263964; margin: 4px 0;"></div>
+
+            <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Monitored Distress Keywords</div>
+            <div style="font-size: 12px; color: #94A3B8; line-height: 18px;">
+              • <strong>"Resqlink Tulong!"</strong> (Primary Wake Phrase)<br>
+              • <strong>"Resqlink Help!"</strong> (English Wake Phrase)<br>
+              • <strong>"Tulong!"</strong> (Super Distress • Negation Guarded)<br>
+              • <strong>"Cancel"</strong> (Aborts 10s countdown)<br>
+              <span style="font-size: 11px; color: #64748B;">* Shouting alone or random background noise is strictly rejected.</span>
+            </div>
+
+            <div style="height: 1px; background: #263964; margin: 4px 0;"></div>
+
+            <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;">Voice & Pop-up Alert Sandbox</div>
+            <p style="font-size: 11px; color: #94A3B8;">Test voice distress detection and heads-up pop-up banner without shouting.</p>
+
+            <button class="btn-save-sub" style="background: #F59E0B; color: black;" onclick="simulateVoiceDistress()">
+              🎤 Test Voice & Pop-Up ("Resqlink Tulong!")
+            </button>
+          </div>
+
+          <!-- Card 2: Gemini 2.0 Flash Voice AI Engine -->
+          <div class="sub-section-card" style="margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 18px;">🗣️</span>
+                <span style="font-size: 14px; font-weight: 800; color: #F8FAFC;">Accident Voice AI</span>
+              </div>
+              <span class="badge-pill" style="background: rgba(56, 189, 248, 0.2); color: #38BDF8; border: 1px solid #38BDF8;">Gemini 2.0 Audio</span>
+            </div>
+
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px; margin-top: 6px;">
+              Synthesizes high-fidelity, gentle emergency voice assist via ElevenLabs Multilingual v2 over speakerphone.
+            </p>
+
+            <div style="background: rgba(2, 132, 199, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 8px; padding: 10px; margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 16px;">🔒</span>
+              <div>
+                <div style="font-size: 11px; font-weight: 800; color: #FFFFFF;">ElevenLabs & Dual Gemini: Hardcoded (Secure)</div>
+                <div style="font-size: 10px; color: #94A3B8;">ElevenLabs Soft Voice + Location & Gemini audio keys compiled internally.</div>
+              </div>
+            </div>
+
+            <div class="edit-input-group" style="margin-top: 8px;">
+              <label class="edit-label">Select Emergency Voice Persona (Tagalog & English)</label>
+              <select class="edit-input" id="cfgVoiceSelect" onchange="onVoicePersonaChange(this.value)" style="background: #0D1B2A; color: #F8FAFC; cursor: pointer;">
+                <option value="EXAVITQu4vr4xnSDxMaL" selected>🌸 Sarah — Soft, Reassuring & Gentle (Tagalog & English - Active for All Calls)</option>
+                <option value="hpp4J3VqNfWAUOO0d1Us">✨ Bella — Warm, Bright & Professional (Tagalog & English)</option>
+                <option value="21m00Tcm4TlvDq8ikWAM">🎙️ Rachel — Calm & Clear</option>
+                <option value="Aoede">⚡ Aoede — Gemini 2.0 Flash Audio Fallback</option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <button class="btn-save-sub" style="flex: 1; background: #0284C7; color: white;" onclick="testEmergencyVoice()">
+                🔊 Test Soft Voice
+              </button>
+            </div>
+          </div>
+          </div>
+        </div>
+
+        <!-- ================= SUB-SECTION 5: ABOUT & POLICY ================= -->
+        <div id="subAbout" class="sub-section-container" style="display: none;">
+          <div class="sub-section-card">
+            <div style="font-size: 14px; font-weight: 800; color: #F8FAFC;">ResQLink AI v1.1.0</div>
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px;">
+              Engineered specifically for Philippine disaster resilience. Offline database contains preloaded verified hotlines for 17 Regions, 82 Provinces, and 149 Cities.
+            </p>
+
+            <div style="font-size: 13px; font-weight: 800; color: #F59E0B; margin-top: 6px;">Fail-Soft Dispatch Architecture</div>
+            <p style="font-size: 11px; color: #94A3B8; line-height: 16px;">
+              If a distress phrase is recognized and times out with no response, an UNVERIFIED alert SMS with GPS coordinates is sent to trusted contacts, but <strong>911 is never auto-called</strong> to prevent swamping emergency dispatch with false alarms.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Full-Screen Emergency HUD Modal -->
+    <div class="emergency-hud" id="emergencyHud">
+      <div>
+        <div style="font-size: 32px; margin-bottom: 8px;">⚠️</div>
+        <div class="hud-title" id="hudTitle">VOICE DISTRESS DETECTED</div>
+        <div class="hud-subtitle" id="hudSubtitle">Detected phrase: "Tulong!"</div>
+      </div>
+
+      <div class="hud-countdown-ring" id="hudCountdown">10</div>
+
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: white; margin-bottom: 12px;" id="hudVoicePrompt">
+          Say "CANCEL" to abort, or "HELP" to dial now.
+        </div>
+        <button class="hud-action-btn hud-call-now" id="hudConfirmBtn" onclick="confirmEmergencyCall()">
+          <span>📞</span> CALL EMERGENCY NOW
+        </button>
+        <button class="hud-action-btn" onclick="startVoiceAssistSimulation('User Requested Silent / Can\'t Talk Voice Assist')" style="background: #1E3A8A; color: white; border: 1.5px solid #3B82F6; margin-bottom: 10px;">
+          <span>🤖</span> CAN'T TALK (AI VOICE ASSIST)
+        </button>
+        <button class="hud-action-btn hud-cancel" onclick="closeEmergencyHud()">
+          <span>✕</span> CANCEL EMERGENCY
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= FULL IN-CALL VOICE ASSIST & HANDOVER HUD ================= -->
+    <div class="emergency-hud" id="voiceAssistHud" style="background: #060D1E; z-index: 1000; padding: 24px 16px; justify-content: space-between;">
+      <!-- Top Section: Status pill & Target -->
+      <div style="text-align: center; width: 100%;">
+        <div id="vaStatusPill" class="badge-pill" style="display: inline-flex; align-items: center; gap: 8px; background: #7F1D1D; color: #FFFFFF; border: 1px solid #EF4444; padding: 6px 14px; font-size: 11px; font-weight: 800; border-radius: 20px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #EF4444; animation: vaPulse 1s infinite;" id="vaStatusDot"></span>
+          <span id="vaStatusText">AI VOICE ASSIST • SPEAKERPHONE MAX (CYCLE 1/3)</span>
+        </div>
+
+        <div style="font-size: 18px; font-weight: 900; color: #FFFFFF; margin-top: 12px;" id="vaTargetTitle">Quezon City General Hospital (ER)</div>
+        <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;" id="vaTargetSubtitle">Connected Line: 02-8863-0800 • Speakerphone Engaged</div>
+
+        <!-- Animated Audio Waveform -->
+        <div class="va-waveform-row" id="vaWaveform">
+          <div class="va-bar"></div><div class="va-bar"></div><div class="va-bar"></div>
+          <div class="va-bar"></div><div class="va-bar"></div><div class="va-bar"></div>
+          <div class="va-bar"></div><div class="va-bar"></div><div class="va-bar"></div>
+          <div class="va-bar"></div><div class="va-bar"></div><div class="va-bar"></div>
+        </div>
+      </div>
+
+      <!-- Middle Section: Live Transcript Box & Vitals Strip -->
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 8px; flex: 1; margin: 12px 0; overflow: hidden;">
+        <!-- Transcript Box -->
+        <div style="flex: 1; background: #101C36; border: 1px solid #263964; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 900; color: #FF5252;" id="vaTranscriptHeader">
+              <span>🔊</span>
+              <span>AI SPOKEN DISPATCH (TO 911 / RESPONDER)</span>
+            </div>
+            <span style="font-size: 9px; color: #94A3B8; font-weight: 800;">Bilingual / Taglish</span>
+          </div>
+          <div style="flex: 1; overflow-y: auto; font-size: 12px; line-height: 18px; color: #F8FAFC; background: #081226; border-radius: 8px; padding: 10px; border: 1px solid #162544;" id="vaLiveTranscript">
+            Initializing synthesized emergency briefing...
+          </div>
+          <div id="vaDetectedWordsBox" style="display: none; margin-top: 8px; background: rgba(16, 185, 129, 0.2); border: 1px solid #10B981; border-radius: 8px; padding: 6px 10px; font-size: 11px; color: #6EE7B7; font-weight: 800;">
+            🗣️ Patient Heard: "<span id="vaDetectedWordsText">tulong</span>"
+          </div>
+
+          <!-- Dispatcher Live Q&A Dialogue -->
+          <div id="vaDispatcherQaBox" style="display: none; margin-top: 8px; background: #1E293B; border: 1px solid #3B82F6; border-radius: 8px; padding: 8px; font-size: 11px;">
+            <div style="color: #93C5FD; font-weight: 800; display: flex; align-items: center; gap: 4px;">
+              <span>🎧</span> Dispatcher Asked:
+            </div>
+            <div id="vaDispatcherQuestionText" style="color: #FFFFFF; font-weight: 700; margin: 3px 0 6px 0;">"..."</div>
+            <div style="color: #6EE7B7; font-weight: 800; display: flex; align-items: center; gap: 4px;">
+              <span>🤖</span> ResQLink Voice AI Answer:
+            </div>
+            <div id="vaDispatcherAnswerText" style="color: #E2E8F0; font-size: 10.5px; line-height: 15px;">"..."</div>
+          </div>
+
+          <!-- Dispatcher Inquiry Simulation Strip -->
+          <div id="vaDispatcherChipsContainer" style="margin-top: 8px;">
+            <div style="font-size: 9px; font-weight: 800; color: #94A3B8; margin-bottom: 4px; letter-spacing: 0.5px;">SIMULATE DISPATCHER INQUIRY (TEST SLM):</div>
+            <div style="display: flex; gap: 5px; overflow-x: auto; padding-bottom: 4px;" class="custom-scrollbar">
+              <button onclick="simulateDispatcherQuestion('Is the patient conscious?')" style="background: #1E293B; border: 1px solid #3B82F6; color: #93C5FD; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;">
+                ❓ Conscious?
+              </button>
+              <button onclick="simulateDispatcherQuestion('How bad was the crash?')" style="background: #1E293B; border: 1px solid #3B82F6; color: #93C5FD; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;">
+                ❓ Crash severity?
+              </button>
+              <button onclick="simulateDispatcherQuestion('What is the exact landmark?')" style="background: #1E293B; border: 1px solid #3B82F6; color: #93C5FD; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;">
+                ❓ Exact landmark?
+              </button>
+              <button onclick="simulateDispatcherQuestion('Are they bleeding or trapped in the car?')" style="background: rgba(127, 29, 29, 0.4); border: 1px solid #EF4444; color: #FCA5A5; font-size: 10px; font-weight: 800; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;" title="Strict safety guardrail: AI must decline visual guessing">
+                ⚠️ Bleeding / Trapped?
+              </button>
+              <button onclick="simulateDispatcherQuestion('Any allergies or medical conditions?')" style="background: #1E293B; border: 1px solid #3B82F6; color: #93C5FD; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;">
+                ❓ Allergies?
+              </button>
+              <button onclick="simulateDispatcherQuestion('Who is the emergency contact?')" style="background: #1E293B; border: 1px solid #3B82F6; color: #93C5FD; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 4px 8px; white-space: nowrap; cursor: pointer;">
+                ❓ Contact?
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Patient Vitals Summary -->
+        <div style="background: #162544; border: 1px solid #263964; border-radius: 12px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 9px; color: #94A3B8; font-weight: 800;">PATIENT</div>
+            <div style="font-size: 12px; font-weight: 800; color: #FFFFFF;" id="vaPatientName">Juan Dela Cruz</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-size: 9px; color: #94A3B8; font-weight: 800;">BLOOD</div>
+            <div style="font-size: 12px; font-weight: 900; color: #EF4444;" id="vaBloodType">O+</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 9px; color: #94A3B8; font-weight: 800;">ALLERGIES</div>
+            <div style="font-size: 12px; font-weight: 800; color: #FBBF24;" id="vaAllergies">Penicillin</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Controls: Handover Simulation Buttons -->
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+        <!-- Take Over Button -->
+        <button id="btnManualTakeOver" onclick="performVoiceAssistHandover('Patient Tapped [I Am Conscious]')" style="background: #10B981; color: white; border: none; border-radius: 12px; height: 48px; font-size: 13px; font-weight: 900; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span>🗣️</span> I AM CONSCIOUS (TAKE OVER CALL)
+        </button>
+
+        <!-- Test Speech Simulation Button -->
+        <button id="btnSimulateSpeech" onclick="simulatePatientSpeaking('Hello... tulong, naririnig ko kayo')" style="background: #1E293B; color: #38BDF8; border: 1px solid #0284C7; border-radius: 12px; height: 38px; font-size: 11px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <span>🎙️</span> Test Simulation: Patient Speaks ("Hello... tulong")
+        </button>
+
+        <!-- End Call Button -->
+        <button onclick="endVoiceAssistCall()" style="background: #DC2626; color: white; border: none; border-radius: 12px; height: 42px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <span>📞</span> END EMERGENCY CALL
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ================= DUAL HARDCODED GEMINI & ELEVENLABS CREDENTIALS =================
+    // Key #1: Gemini Location & 5km Hotline Scanner Key:
+    const HARDCODED_GEMINI_LOCATION_KEY = "";
+    // Key #2: Gemini Voice & Dispatcher Speech Key:
+    const HARDCODED_GEMINI_VOICE_KEY = "";
+    // Key #3: ElevenLabs Soft Multilingual v2 Voice Key (Tagalog & English):
+    const HARDCODED_ELEVENLABS_KEY = "";
+    const HARDCODED_ELEVENLABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah (Soft, Reassuring Tagalog & English)
+
+    let activeSubSection = 'NONE';
+    let isGuardianOn = true;
+    let currentLat = 14.5995;
+    let currentLng = 120.9842;
+    let currentAddress = 'Manila, Philippines';
+    let configuredCallPriority = 'LOCAL_HOTLINE';
+    let configuredSimPref = 'SYSTEM_DEFAULT';
+
+    // Update clock
+    function updateLiveClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const el = document.getElementById('liveClock');
+      if (el) el.innerText = `${h}:${m}`;
+    }
+    setInterval(updateLiveClock, 1000);
+    updateLiveClock();
+
+    // Check user session
+    function checkSession() {
+      const loggedIn = localStorage.getItem('resqlink_logged_in');
+      if (loggedIn === 'true') {
+        const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const user = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
+        const blood = localStorage.getItem('resqlink_blood') || 'O+';
+        const allergies = localStorage.getItem('resqlink_allergies') || 'Penicillin, Pollen';
+        const notes = localStorage.getItem('resqlink_notes') || 'Mild Asthma (Inhaler in pocket)';
+        const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+        const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+        configuredCallPriority = localStorage.getItem('resqlink_call_priority') || 'LOCAL_HOTLINE';
+        configuredSimPref = localStorage.getItem('resqlink_sim_pref') || 'SYSTEM_DEFAULT';
+
+        // Update Home view
+        document.getElementById('homeUserName').innerText = user;
+        document.getElementById('homeBloodType').innerText = blood;
+        document.getElementById('homeAllergies').innerText = allergies;
+        document.getElementById('homeIceContact').innerText = `${iceName} (${icePhone})`;
+        document.getElementById('phonebookIceName').innerText = iceName;
+        document.getElementById('phonebookIcePhone').innerText = `Family • ${icePhone}`;
+        document.getElementById('priorityFamilyDesc').innerText = `Directly auto-calls your primary contact: ${iceName} (${icePhone}).`;
+
+        // Update Edit Form inputs
+        document.getElementById('editName').value = user;
+        document.getElementById('editBloodType').value = blood;
+        document.getElementById('editAllergies').value = allergies;
+        document.getElementById('editNotes').value = notes;
+        document.getElementById('editIceName').value = iceName;
+        document.getElementById('editIcePhone').value = icePhone;
+
+        // Populate Voice persona settings (Default: Sarah Soft Voice for all calls)
+        let selectedVoice = localStorage.getItem('resqlink_voice_persona');
+        if (!selectedVoice || selectedVoice === 'Aoede' || selectedVoice === '21m00Tcm4TlvDq8ikWAM') {
+          selectedVoice = HARDCODED_ELEVENLABS_VOICE_ID;
+          localStorage.setItem('resqlink_voice_persona', HARDCODED_ELEVENLABS_VOICE_ID);
+        }
+        const voiceSelect = document.getElementById('cfgVoiceSelect');
+        if (voiceSelect) voiceSelect.value = selectedVoice;
+
+        // Update settings summary
+        document.getElementById('settingsProfileSummary').innerText = `${user} • Blood ${blood} • Allergies`;
+
+        updateSimUI();
+        updateCallPriorityUI();
+
+        document.getElementById('loginView').style.display = 'none';
+        document.getElementById('settingsView').style.display = 'none';
+        document.getElementById('homeView').style.display = 'flex';
+        updateMaxDrag();
+
+        // Fetch user's real geolocation
+        fetchLiveLocation(false);
+      } else {
+        document.getElementById('loginView').style.display = 'flex';
+        document.getElementById('homeView').style.display = 'none';
+        document.getElementById('settingsView').style.display = 'none';
+      }
+    }
+
+    // Call Priority & SIM Management
+    function selectCallPriority(priority) {
+      configuredCallPriority = priority;
+      localStorage.setItem('resqlink_call_priority', priority);
+      updateCallPriorityUI();
+      const labels = {
+        'LOCAL_HOTLINE': 'Nearest Local Station First (Auto-dial)',
+        'UNIVERSAL_911': 'Universal 911 First',
+        'FAMILY_FIRST': 'Family / ICE Contact First'
+      };
+      alert(`[CALL ROUTE UPDATED]:\nActive Priority set to: ${labels[priority] || priority}\n\nAll emergency SOS triggers and buttons will now route to this priority.`);
+      handleSettingsBack();
+    }
+
+    function selectSimPreference(pref) {
+      configuredSimPref = pref;
+      localStorage.setItem('resqlink_sim_pref', pref);
+      updateSimUI();
+      const simNames = {
+        'SYSTEM_DEFAULT': 'System Default (Carrier Standard)',
+        'SIM_1': 'SIM Slot 1 (Smart / Primary)',
+        'SIM_2': 'SIM Slot 2 (Globe / DITO)'
+      };
+      alert(`[OUTGOING SIM CONFIGURED]:\nActive outgoing SIM card set to:\n${simNames[pref] || pref}\n\nAll automatic emergency calls and SOS SMS alerts will now route via this SIM slot.`);
+    }
+
+    function updateSimUI() {
+      const optDefault = document.getElementById('optSimDefault');
+      const opt1 = document.getElementById('optSim1');
+      const opt2 = document.getElementById('optSim2');
+      if (optDefault && opt1 && opt2) {
+        optDefault.classList.remove('selected');
+        opt1.classList.remove('selected');
+        opt2.classList.remove('selected');
+
+        if (configuredSimPref === 'SIM_1') {
+          opt1.classList.add('selected');
+        } else if (configuredSimPref === 'SIM_2') {
+          opt2.classList.add('selected');
+        } else {
+          optDefault.classList.add('selected');
+        }
+      }
+      updateCallPriorityUI();
+    }
+
+    function updateCallPriorityUI() {
+      const optLocal = document.getElementById('optLocalHotline');
+      const opt911 = document.getElementById('optUniversal911');
+      const optFamily = document.getElementById('optFamilyFirst');
+
+      if (optLocal) optLocal.classList.remove('selected');
+      if (opt911) opt911.classList.remove('selected');
+      if (optFamily) optFamily.classList.remove('selected');
+
+      const pillIcon = document.getElementById('priorityPillIcon');
+      const pillLabel = document.getElementById('priorityPillLabel');
+      const settingsSub = document.getElementById('settingsPrioritySummary');
+      const sliderLabel = document.getElementById('sliderTextLabel');
+      const sosSublabel = document.getElementById('sosCoreSublabel');
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const stHotline = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
+
+      const simTag = configuredSimPref === 'SIM_1' ? ' • SIM 1' : (configuredSimPref === 'SIM_2' ? ' • SIM 2' : '');
+
+      if (configuredCallPriority === 'LOCAL_HOTLINE') {
+        if (optLocal) optLocal.classList.add('selected');
+        if (pillIcon) pillIcon.innerText = '🏢';
+        const pinned = pinnedStationId ? localStations.find(s => s.id === pinnedStationId) : null;
+        if (pinned) {
+          if (pillLabel) pillLabel.innerText = `1st: ${pinned.name} (${pinned.phone})${simTag}`;
+          if (settingsSub) settingsSub.innerText = `★ Pinned: ${pinned.name}${simTag}`;
+          if (sliderLabel) sliderLabel.innerText = `SLIDE TO CALL ${pinned.phone}  >>>`;
+          if (sosSublabel) sosSublabel.innerText = 'CALL ' + pinned.category;
+        } else {
+          if (pillLabel) pillLabel.innerText = `1st: Nearest Local Station (${stHotline})${simTag}`;
+          if (settingsSub) settingsSub.innerText = `Nearest Local Station First${simTag}`;
+          if (sliderLabel) sliderLabel.innerText = `SLIDE TO CALL ${stHotline}  >>>`;
+          if (sosSublabel) sosSublabel.innerText = 'CALL DISPATCH';
+        }
+      } else if (configuredCallPriority === 'UNIVERSAL_911') {
+        if (opt911) opt911.classList.add('selected');
+        if (pillIcon) pillIcon.innerText = '🚨';
+        if (pillLabel) pillLabel.innerText = `1st: Universal 911 Dispatch${simTag}`;
+        if (settingsSub) settingsSub.innerText = `Universal 911 First${simTag}`;
+        if (sliderLabel) sliderLabel.innerText = 'SLIDE TO CALL 911  >>>';
+        if (sosSublabel) sosSublabel.innerText = 'CALL 911';
+      } else if (configuredCallPriority === 'FAMILY_FIRST') {
+        if (optFamily) optFamily.classList.add('selected');
+        if (pillIcon) pillIcon.innerText = '👨‍👩‍👧';
+        if (pillLabel) pillLabel.innerText = `1st: Family (${iceName})${simTag}`;
+        if (settingsSub) settingsSub.innerText = `Family First (${iceName})${simTag}`;
+        if (sliderLabel) sliderLabel.innerText = `SLIDE TO CALL FAMILY (${iceName})  >>>`;
+        if (sosSublabel) sosSublabel.innerText = 'CALL FAMILY';
+      }
+    }
+
+    // Real Browser GPS Geolocation + Reverse Geocoding
+    function fetchLiveLocation(userTriggered) {
+      const badge = document.getElementById('gpsBadgeText');
+      const cardLoc = document.getElementById('cardLocationText');
+      const stationNameEl = document.getElementById('nearestStationName');
+      const stationHotlineEl = document.getElementById('nearestStationHotline');
+      const stationDistTag = document.getElementById('stationDistTag');
+
+      if (userTriggered) badge.innerText = 'Detecting Real GPS Coordinates...';
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            currentLat = position.coords.latitude;
+            currentLng = position.coords.longitude;
+            const accuracy = Math.round(position.coords.accuracy || 10);
+
+            badge.innerText = `GPS Active • ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)} (±${accuracy}m)`;
+
+            // Reverse Geocode via OpenStreetMap Nominatim
+            try {
+              const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${currentLat}&lon=${currentLng}`);
+              const data = await res.json();
+              if (data && data.address) {
+                const city = data.address.city || data.address.town || data.address.municipality || data.address.suburb || data.address.state || 'Philippines';
+                const province = data.address.province || data.address.region || data.address.country || '';
+                currentAddress = `${city}, ${province}`.trim();
+                cardLoc.innerText = currentAddress;
+
+                // Dynamically update nearest station based on real resolved city!
+                const lowerCity = (city + ' ' + province).toLowerCase();
+                if (lowerCity.includes('manila')) {
+                  stationNameEl.innerText = 'Manila Disaster Risk (MDRRMO)';
+                  stationHotlineEl.innerText = 'Hotline: 02-8527-5174 / 122';
+                } else if (lowerCity.includes('quezon')) {
+                  stationNameEl.innerText = 'Quezon City DRRMO Center';
+                  stationHotlineEl.innerText = 'Hotline: 122 / 02-8927-5914';
+                } else if (lowerCity.includes('makati')) {
+                  stationNameEl.innerText = 'Makati Command Center (C3)';
+                  stationHotlineEl.innerText = 'Hotline: 168 / 02-8870-1920';
+                } else if (lowerCity.includes('pasig')) {
+                  stationNameEl.innerText = 'Pasig City Rescue Command';
+                  stationHotlineEl.innerText = 'Hotline: 02-8643-0000 / 122';
+                } else if (lowerCity.includes('taguig')) {
+                  stationNameEl.innerText = 'Taguig City Rescue Command';
+                  stationHotlineEl.innerText = 'Hotline: 02-8789-3200 / 122';
+                } else if (lowerCity.includes('cavite') || lowerCity.includes('bacoor') || lowerCity.includes('imus') || lowerCity.includes('dasmar')) {
+                  stationNameEl.innerText = `${city} CDRRMO Emergency Team`;
+                  stationHotlineEl.innerText = 'Hotline: 046-417-0727 / 122';
+                } else if (lowerCity.includes('laguna') || lowerCity.includes('calamba') || lowerCity.includes('santa rosa') || lowerCity.includes('san pedro')) {
+                  stationNameEl.innerText = `${city} CDRRMO Emergency Team`;
+                  stationHotlineEl.innerText = 'Hotline: 049-545-6789 / 122';
+                } else if (lowerCity.includes('bulacan') || lowerCity.includes('malolos') || lowerCity.includes('san jose')) {
+                  stationNameEl.innerText = `${city} Disaster Risk Unit`;
+                  stationHotlineEl.innerText = 'Hotline: 044-791-0566 / 122';
+                } else {
+                  stationNameEl.innerText = `${city} Municipal Rescue (122)`;
+                  stationHotlineEl.innerText = 'Hotline: 122 / 117 / 911';
+                }
+                stationDistTag.innerText = 'Nearest';
+                updateCallPriorityUI();
+              } else {
+                currentAddress = `${currentLat.toFixed(3)}, ${currentLng.toFixed(3)}`;
+                cardLoc.innerText = currentAddress;
+              }
+            } catch (e) {
+              cardLoc.innerText = `Lat ${currentLat.toFixed(3)}, ${currentLng.toFixed(3)}`;
+            }
+
+            // Update interactive OpenStreetMap iframe centered at real location
+            updateMapIframe(currentLat, currentLng);
+
+            if (userTriggered) {
+              alert(`Real GPS Acquired!\n\nCoordinates: ${currentLat.toFixed(4)}° N, ${currentLng.toFixed(4)}° E\nAddress: ${currentAddress}\nAccuracy: ±${accuracy} meters`);
+            }
+          },
+          (error) => {
+            console.warn('Geolocation access fallback:', error.message);
+            badge.innerText = 'GPS Active • High-Accuracy Cellular Fallback';
+            cardLoc.innerText = 'Live Location (Philippines)';
+            updateMapIframe(currentLat, currentLng);
+          },
+          { enableHighAccuracy: true, timeout: 6000 }
+        );
+      } else {
+        updateMapIframe(currentLat, currentLng);
+      }
+    }
+
+    function updateMapIframe(lat, lng) {
+      const iframe = document.getElementById('mapIframe');
+      if (iframe) {
+        iframe.src = `https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=15&t=&ie=UTF8&iwloc=&output=embed`;
+      }
+    }
+
+    function openGoogleMapsExternal() {
+      const url = `https://www.google.com/maps?q=${currentLat},${currentLng}`;
+      window.open(url, '_blank');
+    }
+
+    function callNearestStation() {
+      const name = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
+      const hotline = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
+      alert(`[DIRECT AUTO-CALL]: Dialing nearest station: ${name} (${hotline}) via cellular ACTION_CALL.\n\nSimulating instant hands-free emergency dispatch.`);
+    }
+
+    function doGoogleLogin() {
+      localStorage.setItem('resqlink_logged_in', 'true');
+      localStorage.setItem('resqlink_user', 'Juan Dela Cruz');
+      checkSession();
+    }
+
+    function doGuestLogin() {
+      localStorage.setItem('resqlink_logged_in', 'true');
+      localStorage.setItem('resqlink_user', 'Emergency Guest');
+      checkSession();
+    }
+
+    function doLogout() {
+      localStorage.removeItem('resqlink_logged_in');
+      localStorage.removeItem('resqlink_user');
+      activeSubSection = 'NONE';
+      checkSession();
+    }
+
+    // Settings Navigation
+    function openSettingsView() {
+      activeSubSection = 'NONE';
+      showSubSectionView('NONE');
+      document.getElementById('homeView').style.display = 'none';
+      document.getElementById('settingsView').style.display = 'flex';
+    }
+
+    function closeSettingsView() {
+      activeSubSection = 'NONE';
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('homeView').style.display = 'flex';
+      updateMaxDrag();
+    }
+
+    function openSettingsSubSection(sub) {
+      document.getElementById('homeView').style.display = 'none';
+      document.getElementById('settingsView').style.display = 'flex';
+      activeSubSection = sub;
+      showSubSectionView(sub);
+    }
+
+    function handleSettingsBack() {
+      if (activeSubSection !== 'NONE') {
+        activeSubSection = 'NONE';
+        showSubSectionView('NONE');
+      } else {
+        closeSettingsView();
+      }
+    }
+
+    function showSubSectionView(sub) {
+      const titles = {
+        'NONE': 'Settings',
+        'CALL_PRIORITY': 'Emergency Call Routing',
+        'ACCOUNT_MEDICAL': 'Edit Medical Profile',
+        'PHONEBOOK': 'Emergency Phonebook',
+        'PERMISSIONS': 'Permissions & Privacy',
+        'GUARDIAN_AI': 'Guardian Voice AI',
+        'ABOUT': 'About & Safety Policy'
+      };
+
+      document.getElementById('settingsViewTitle').innerText = titles[sub] || 'Settings';
+      document.getElementById('settingsMainMenu').style.display = sub === 'NONE' ? 'block' : 'none';
+      document.getElementById('subCallPriority').style.display = sub === 'CALL_PRIORITY' ? 'flex' : 'none';
+      document.getElementById('subAccountMedical').style.display = sub === 'ACCOUNT_MEDICAL' ? 'flex' : 'none';
+      document.getElementById('subPhonebook').style.display = sub === 'PHONEBOOK' ? 'flex' : 'none';
+      document.getElementById('subPermissions').style.display = sub === 'PERMISSIONS' ? 'flex' : 'none';
+      document.getElementById('subGuardianAi').style.display = sub === 'GUARDIAN_AI' ? 'flex' : 'none';
+      document.getElementById('subAbout').style.display = sub === 'ABOUT' ? 'flex' : 'none';
+    }
+
+    function saveMedicalProfile() {
+      const name = document.getElementById('editName').value;
+      const blood = document.getElementById('editBloodType').value;
+      const allergies = document.getElementById('editAllergies').value;
+      const notes = document.getElementById('editNotes').value;
+      const iceName = document.getElementById('editIceName').value;
+      const icePhone = document.getElementById('editIcePhone').value;
+
+      localStorage.setItem('resqlink_user', name);
+      localStorage.setItem('resqlink_blood', blood);
+      localStorage.setItem('resqlink_allergies', allergies);
+      localStorage.setItem('resqlink_notes', notes);
+      localStorage.setItem('resqlink_ice_name', iceName);
+      localStorage.setItem('resqlink_ice_phone', icePhone);
+
+      alert('Medical Profile saved successfully!');
+      checkSession();
+      handleSettingsBack();
+    }
+
+    let speechRecognitionInstance = null;
+
+    /* ================= ANDROID HEADS-UP NOTIFICATION CONTROLS ================= */
+    let alarmAudioCtx = null;
+    let alarmOscillator = null;
+    let alarmGain = null;
+    let alarmInterval = null;
+    let vibrationInterval = null;
+
+    function startEmergencySirenAndVibration() {
+      // 1. Continuous Repeating Vibration (800ms on, 400ms off)
+      try {
+        if ("vibrate" in navigator) {
+          navigator.vibrate([800, 400, 800, 400]);
+          clearInterval(vibrationInterval);
+          vibrationInterval = setInterval(() => {
+            navigator.vibrate([800, 400, 800, 400]);
+          }, 2400);
+        }
+      } catch (e) {
+        console.warn("Vibration not supported:", e);
+      }
+
+      // 2. Loud Emergency Alarm Siren (Web Audio API Synthesizer)
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        if (!alarmAudioCtx) {
+          alarmAudioCtx = new AudioContext();
+        }
+        if (alarmAudioCtx.state === 'suspended') {
+          alarmAudioCtx.resume();
+        }
+
+        if (!alarmOscillator) {
+          alarmOscillator = alarmAudioCtx.createOscillator();
+          alarmGain = alarmAudioCtx.createGain();
+
+          alarmOscillator.type = 'sawtooth';
+          alarmOscillator.frequency.setValueAtTime(750, alarmAudioCtx.currentTime);
+          alarmGain.gain.setValueAtTime(0.25, alarmAudioCtx.currentTime);
+
+          alarmOscillator.connect(alarmGain);
+          alarmGain.connect(alarmAudioCtx.destination);
+          alarmOscillator.start();
+
+          let highPitch = false;
+          clearInterval(alarmInterval);
+          alarmInterval = setInterval(() => {
+            if (!alarmAudioCtx || !alarmOscillator) return;
+            highPitch = !highPitch;
+            const targetFreq = highPitch ? 1050 : 750;
+            alarmOscillator.frequency.exponentialRampToValueAtTime(targetFreq, alarmAudioCtx.currentTime + 0.15);
+          }, 300);
+        }
+      } catch (e) {
+        console.warn("Audio siren error:", e);
+      }
+    }
+
+    function stopEmergencySirenAndVibration() {
+      // 1. Stop vibration immediately
+      clearInterval(vibrationInterval);
+      vibrationInterval = null;
+      try {
+        if ("vibrate" in navigator) {
+          navigator.vibrate(0);
+        }
+      } catch (e) {}
+
+      // 2. Stop alarm siren immediately
+      clearInterval(alarmInterval);
+      alarmInterval = null;
+      try {
+        if (alarmOscillator) {
+          alarmOscillator.stop();
+          alarmOscillator.disconnect();
+          alarmOscillator = null;
+        }
+        if (alarmAudioCtx) {
+          alarmAudioCtx.close();
+          alarmAudioCtx = null;
+        }
+      } catch (e) {}
+    }
+
+    function showHeadsUpNotification(phrase) {
+      const popup = document.getElementById('headsUpNotification');
+      if (!popup) return;
+      const cleanPhrase = phrase ? phrase.replace(/"/g, '') : 'Resqlink Tulong!';
+      document.getElementById('headsUpTitle').innerText = '🚨 EMERGENCY DISTRESS DETECTED';
+      document.getElementById('headsUpBody').innerText = `Voice Keyword: "${cleanPhrase}" • 10s countdown to dispatch`;
+      popup.classList.add('show');
+      startEmergencySirenAndVibration();
+    }
+
+    function dismissHeadsUpNotification() {
+      const popup = document.getElementById('headsUpNotification');
+      if (popup) {
+        popup.classList.remove('show');
+      }
+      stopEmergencySirenAndVibration();
+    }
+
+    function onHeadsUpClicked() {
+      const hud = document.getElementById('emergencyHud');
+      if (hud && !hud.classList.contains('show')) {
+        hud.classList.add('show');
+      }
+    }
+
+    function cancelEmergencyCall() {
+      closeEmergencyHud();
+      dismissHeadsUpNotification();
+    }
+
+    function startRealAlwaysListening() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        console.log("[Always Listening]: Web Speech API not supported in this browser, standby mode.");
+        return;
+      }
+      if (speechRecognitionInstance) {
+        try { speechRecognitionInstance.stop(); } catch(e){}
+      }
+      try {
+        speechRecognitionInstance = new SpeechRec();
+        speechRecognitionInstance.continuous = true;
+        speechRecognitionInstance.interimResults = true;
+        speechRecognitionInstance.lang = 'fil-PH';
+
+        speechRecognitionInstance.onresult = function(event) {
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript.toLowerCase().trim();
+            console.log("[Always Listening Heard]:", transcript);
+
+            // 1. Check for cancel/abort
+            const cancelWords = ["cancel", "stop", "abort", "tama na", "huwag", "ayaw", "bawi"];
+            if (cancelWords.some(w => transcript.includes(w))) {
+              console.log("[Always Listening]: Abort detected!");
+              cancelEmergencyCall();
+              return;
+            }
+
+            // Normalize common speech recognizer phonetics for 'resqlink'
+            const normalized = transcript
+              .replace(/rescue\s*link/g, "resqlink")
+              .replace(/resq\s*link/g, "resqlink")
+              .replace(/risk\s*link/g, "resqlink")
+              .replace(/reslink/g, "resqlink")
+              .replace(/rest\s*link/g, "resqlink");
+
+            // 2. Primary Wake Keyword: "Resqlink Tulong!" or "Resqlink Help!"
+            const isPrimaryTulong = normalized.includes("resqlink tulong") ||
+                                    normalized.includes("resqlink, tulong") ||
+                                    normalized.includes("resqlink saklolo");
+            if (isPrimaryTulong) {
+              console.log("[Always Listening]: Primary Wake Keyword MATCHED 'Resqlink Tulong!'");
+              showHeadsUpNotification("Resqlink Tulong!");
+              triggerSosCountdown('VOICE KEYWORD: "RESQLINK TULONG!"', 10);
+              return;
+            }
+
+            const isPrimaryHelp = normalized.includes("resqlink help") ||
+                                  normalized.includes("resqlink emergency") ||
+                                  normalized.includes("resqlink save");
+            if (isPrimaryHelp) {
+              console.log("[Always Listening]: Primary Wake Keyword MATCHED 'Resqlink Help!'");
+              showHeadsUpNotification("Resqlink Help!");
+              triggerSosCountdown('VOICE KEYWORD: "RESQLINK HELP!"', 10);
+              return;
+            }
+
+            // 3. Super Distress Standalone: "Tulong!", "Saklolo!" (negation guarded)
+            // Raw shouting or casual chatter without these keywords is strictly discarded!
+            const isNegated = transcript.includes("wag") || transcript.includes("huwag") || transcript.includes("hindi") || transcript.includes(" di ");
+            if (!isNegated) {
+              const words = transcript.split(/[\s,!?.]+/).filter(w => w.length > 0);
+              const hasSuperDistress = words.includes("tulong") || words.includes("saklolo");
+              if (hasSuperDistress) {
+                console.log("[Always Listening]: Super Distress MATCHED 'Tulong!'");
+                showHeadsUpNotification("Tulong!");
+                triggerSosCountdown('SUPER DISTRESS: "TULONG!"', 10);
+                return;
+              }
+            }
+
+            // All other casual talk, noise, screams, or shouting without keywords is ignored
+          }
+        };
+
+        speechRecognitionInstance.onerror = function(event) {
+          if (isGuardianOn && event.error !== 'not-allowed') {
+            setTimeout(() => {
+              if (isGuardianOn && speechRecognitionInstance) {
+                try { speechRecognitionInstance.start(); } catch(e){}
+              }
+            }, 800);
+          }
+        };
+
+        speechRecognitionInstance.onend = function() {
+          if (isGuardianOn) {
+            setTimeout(() => {
+              if (isGuardianOn && speechRecognitionInstance) {
+                try { speechRecognitionInstance.start(); } catch(e){}
+              }
+            }, 300);
+          }
+        };
+
+        speechRecognitionInstance.start();
+        console.log("[Always Listening]: Continuous background listening successfully armed for 'Resqlink Tulong!'");
+      } catch (err) {
+        console.warn("Could not start continuous speech recognition:", err);
+      }
+    }
+
+    function stopRealAlwaysListening() {
+      if (speechRecognitionInstance) {
+        try {
+          speechRecognitionInstance.stop();
+          speechRecognitionInstance = null;
+        } catch(e){}
+      }
+    }
+
+    function toggleGuardianSub(checked) {
+      isGuardianOn = checked;
+      const pill = document.getElementById('settingsGuardianPill');
+      const desc = document.getElementById('settingsGuardianSummary');
+      const subDesc = document.getElementById('subGuardianStatusDesc');
+      const acousticTitle = document.getElementById('acousticTitle');
+      const acousticDesc = document.getElementById('acousticDesc');
+      const bars = document.querySelectorAll('.wave-bar');
+
+      const homeBar = document.getElementById('homeGuardianBar');
+      const homeDot = document.getElementById('homeGuardianDot');
+      const homeTitle = document.getElementById('homeGuardianTitle');
+      const homeBadge = document.getElementById('homeGuardianBadge');
+      const homeSubtitle = document.getElementById('homeGuardianSubtitle');
+      const homeSwitch = document.getElementById('homeGuardianSwitch');
+      const subSwitch = document.getElementById('subGuardianSwitch');
+
+      if (homeSwitch) homeSwitch.checked = checked;
+      if (subSwitch) subSwitch.checked = checked;
+
+      if (checked) {
+        if (pill) { pill.innerText = 'ON'; pill.classList.add('active'); }
+        if (desc) desc.innerText = 'Listening Offline • "Resqlink Tulong!"';
+        if (subDesc) subDesc.innerText = 'Always Listening: "Resqlink Tulong!"';
+        if (acousticTitle) { acousticTitle.innerText = 'ACOUSTIC VAD ACTIVE'; acousticTitle.style.color = '#10B981'; }
+        if (acousticDesc) acousticDesc.innerText = 'Speech Recognizer Monitored';
+        bars.forEach(b => b.style.animationPlayState = 'running');
+
+        if (homeBar) homeBar.classList.remove('paused');
+        if (homeDot) homeDot.classList.remove('paused');
+        if (homeTitle) { homeTitle.innerText = 'Always Listening: ACTIVE'; homeTitle.style.color = '#F8FAFC'; }
+        if (homeBadge) { homeBadge.innerText = 'ON'; homeBadge.className = 'badge-pill active'; }
+        if (homeSubtitle) homeSubtitle.innerText = 'Wake Keyword: "Resqlink Tulong!" (or "Tulong!")';
+
+        startRealAlwaysListening();
+      } else {
+        if (pill) { pill.innerText = 'OFF'; pill.classList.remove('active'); }
+        if (desc) desc.innerText = 'Monitoring Paused';
+        if (subDesc) subDesc.innerText = 'Monitoring Paused';
+        if (acousticTitle) { acousticTitle.innerText = 'ACOUSTIC STANDBY'; acousticTitle.style.color = '#94A3B8'; }
+        if (acousticDesc) acousticDesc.innerText = 'Microphone in low-power idle';
+        bars.forEach(b => {
+          b.style.animationPlayState = 'paused';
+          b.style.height = '6px';
+        });
+
+        if (homeBar) homeBar.classList.add('paused');
+        if (homeDot) homeDot.classList.add('paused');
+        if (homeTitle) { homeTitle.innerText = 'Always Listening: PAUSED'; homeTitle.style.color = '#94A3B8'; }
+        if (homeBadge) { homeBadge.innerText = 'OFF'; homeBadge.className = 'badge-pill priority'; }
+        if (homeSubtitle) homeSubtitle.innerText = 'Tap to activate offline distress listening';
+
+        stopRealAlwaysListening();
+      }
+    }
+
+    function simulateVoiceDistress() {
+      closeSettingsView();
+      showHeadsUpNotification('Resqlink Tulong!');
+      triggerSosCountdown('VOICE KEYWORD: "RESQLINK TULONG!"', 10);
+    }
+
+    // Drag Slider Logic
+    const track = document.getElementById('sliderTrack');
+    const thumb = document.getElementById('sliderThumb');
+    const fill = document.getElementById('sliderFill');
+    let isDragging = false;
+    let startX = 0;
+    let maxDrag = 0;
+
+    function updateMaxDrag() {
+      if (track && thumb) {
+        maxDrag = track.clientWidth - thumb.clientWidth - 6;
+      }
+    }
+    window.addEventListener('resize', updateMaxDrag);
+
+    function onStart(e) {
+      isDragging = true;
+      startX = (e.touches ? e.touches[0].clientX : e.clientX) - thumb.offsetLeft;
+      thumb.style.transition = 'none';
+      fill.style.transition = 'none';
+    }
+
+    function onMove(e) {
+      if (!isDragging) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      let left = clientX - startX;
+      left = Math.max(3, Math.min(left, maxDrag));
+      thumb.style.transform = `translateX(${left - 3}px)`;
+      fill.style.width = `${(left / maxDrag) * 100}%`;
+
+      if (left >= maxDrag * 0.75) {
+        isDragging = false;
+        thumb.style.transition = 'transform 0.18s ease-out';
+        fill.style.transition = 'width 0.18s ease-out';
+        thumb.style.transform = `translateX(${maxDrag}px)`;
+        fill.style.width = '100%';
+        setTimeout(() => {
+          triggerSosCountdown('Slide-to-SOS Activated', 3);
+          setTimeout(resetSlider, 500);
+        }, 120);
+      }
+    }
+
+    function onEnd() {
+      if (!isDragging) return;
+      isDragging = false;
+      resetSlider();
+    }
+
+    function resetSlider() {
+      thumb.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+      fill.style.transition = 'width 0.3s ease-out';
+      thumb.style.transform = 'translateX(0px)';
+      fill.style.width = '0%';
+    }
+
+    thumb.addEventListener('mousedown', onStart);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    thumb.addEventListener('touchstart', onStart);
+    window.addEventListener('touchmove', onMove);
+    window.addEventListener('touchend', onEnd);
+
+    // Countdown and HUD Logic
+    let countdownInterval = null;
+    let remainingSeconds = 10;
+
+    function triggerSosCountdown(title, seconds) {
+      clearInterval(countdownInterval);
+      remainingSeconds = seconds;
+      document.getElementById('hudTitle').innerText = title.toUpperCase();
+      
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+      const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
+      const stNum = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
+
+      const simTag = configuredSimPref === 'SIM_1' ? ' [SIM 1]' : (configuredSimPref === 'SIM_2' ? ' [SIM 2]' : ' [Default SIM]');
+      const pinned = (configuredCallPriority === 'LOCAL_HOTLINE' && pinnedStationId) ? localStations.find(s => s.id === pinnedStationId) : null;
+      const targetLocalName = pinned ? pinned.name : stName;
+      const targetLocalNum = pinned ? pinned.phone : stNum;
+
+      if (configuredCallPriority === 'FAMILY_FIRST') {
+        document.getElementById('hudSubtitle').innerText = `Target: Family — ${iceName} (${icePhone})${simTag}`;
+      } else if (configuredCallPriority === 'UNIVERSAL_911') {
+        document.getElementById('hudSubtitle').innerText = `Target: National Emergency 911 Dispatch${simTag}`;
+      } else {
+        document.getElementById('hudSubtitle').innerText = `Target: ${targetLocalName} (${targetLocalNum})${simTag}`;
+      }
+
+      document.getElementById('hudVoicePrompt').style.display = seconds === 10 ? 'block' : 'none';
+      document.getElementById('hudCountdown').innerText = remainingSeconds;
+
+      const confirmBtn = document.getElementById('hudConfirmBtn');
+      if (configuredCallPriority === 'FAMILY_FIRST') {
+        confirmBtn.innerHTML = `<span>📞</span> CALL ${iceName.toUpperCase()} NOW`;
+      } else if (configuredCallPriority === 'UNIVERSAL_911') {
+        confirmBtn.innerHTML = `<span>📞</span> CALL 911 NOW`;
+      } else {
+        confirmBtn.innerHTML = `<span>📞</span> CALL ${targetLocalNum} NOW`;
+      }
+
+      document.getElementById('emergencyHud').classList.add('show');
+
+      countdownInterval = setInterval(() => {
+        remainingSeconds--;
+        document.getElementById('hudCountdown').innerText = remainingSeconds;
+        if (remainingSeconds <= 0) {
+          clearInterval(countdownInterval);
+          closeEmergencyHud();
+          if (seconds <= 3) {
+            // Grace period ended without abort -> Place the emergency call!
+            confirmEmergencyCall();
+          } else {
+            // 10-second voice distress timer expired with no response -> Automatic Incapacitation Voice Assist!
+            startVoiceAssistSimulation("Accident Incapacitation: 10s Unresponsive Timeout");
+          }
+        }
+      }, 1000);
+    }
+
+    function confirmEmergencyCall() {
+      clearInterval(countdownInterval);
+      closeEmergencyHud();
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+      const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
+      const stNum = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
+      const simLabel = configuredSimPref === 'SIM_1' ? 'SIM Slot 1 (Smart / Primary)' : (configuredSimPref === 'SIM_2' ? 'SIM Slot 2 (Globe / DITO)' : 'System Default Carrier SIM');
+      const pinned = (configuredCallPriority === 'LOCAL_HOTLINE' && pinnedStationId) ? localStations.find(s => s.id === pinnedStationId) : null;
+      const targetLocalName = pinned ? pinned.name : stName;
+      const targetLocalNum = pinned ? pinned.phone : stNum;
+
+      if (configuredCallPriority === 'FAMILY_FIRST') {
+        alert(`[EMERGENCY CALL PLACED]:\n\nDirect auto-calling Family Contact:\n${iceName} (${icePhone})\nvia ACTION_CALL.\n\n✓ Priority Route: Family First\n✓ Outgoing SIM: ${simLabel}\n✓ Parallel emergency SMS with live GPS dispatched to trusted contacts.`);
+      } else if (configuredCallPriority === 'UNIVERSAL_911') {
+        alert(`[EMERGENCY CALL PLACED]:\n\nInitiating Universal 911 Emergency Dispatch Prompt.\n\n✓ Priority Route: Universal 911\n✓ Outgoing SIM: ${simLabel}\n✓ Parallel emergency SMS with live GPS dispatched to trusted contacts.`);
+      } else {
+        alert(`[EMERGENCY CALL PLACED]:\n\nDirect auto-calling Nearest Local Station:\n${targetLocalName} (${targetLocalNum})\nvia cellular ACTION_CALL.\n\n✓ Priority Route: Nearest Local Station${pinned ? ' (Pinned)' : ''}\n✓ Outgoing SIM: ${simLabel}\n✓ Parallel emergency SMS with live GPS dispatched to trusted contacts.`);
+      }
+    }
+
+    function closeEmergencyHud() {
+      clearInterval(countdownInterval);
+      document.getElementById('emergencyHud').classList.remove('show');
+      dismissHeadsUpNotification();
+    }
+
+    // Keyboard / Browser Back navigation support (mirrors Android BackHandler)
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (document.getElementById('voiceAssistHud') && document.getElementById('voiceAssistHud').classList.contains('show')) {
+          endVoiceAssistCall();
+        } else if (document.getElementById('emergencyHud').classList.contains('show')) {
+          closeEmergencyHud();
+        } else if (document.getElementById('mapView') && document.getElementById('mapView').style.display === 'flex') {
+          closeMapView();
+        } else if (document.getElementById('directoryView').style.display === 'flex') {
+          closeDirectoryView();
+        } else if (activeSubSection !== 'NONE') {
+          handleSettingsBack();
+        } else if (document.getElementById('settingsView').style.display === 'flex') {
+          closeSettingsView();
+        }
+      }
+    });
+
+    // ================= 5KM HOTLINES & AI DISCOVERY LOGIC =================
+    let selectedDirCategory = 'ALL';
+    let pinnedStationId = localStorage.getItem('resqlink_pinned_station') || null;
+
+    let localStations = [
+      {
+        id: 'BRGY-01',
+        name: 'Barangay Holy Spirit Emergency Hall',
+        category: 'BARANGAY',
+        categoryLabel: 'Barangay Hall',
+        catColor: '#10B981',
+        address: 'Faustino St, Quezon City',
+        phone: '02-8931-5047',
+        distance: 0.4
+      },
+      {
+        id: 'PNP-01',
+        name: 'QCPD Police Station 6 (Batasan)',
+        category: 'POLICE',
+        categoryLabel: 'Police (PNP)',
+        catColor: '#3B82F6',
+        address: 'Batasan Rd, Quezon City',
+        phone: '02-8931-7000',
+        distance: 0.9
+      },
+      {
+        id: 'HOSP-01',
+        name: 'Quezon City General Hospital (ER 24/7)',
+        category: 'HOSPITAL',
+        categoryLabel: 'Hospital / ER',
+        catColor: '#E53935',
+        address: 'Seminary Rd, Quezon City',
+        phone: '02-8863-0800',
+        distance: 1.2
+      },
+      {
+        id: 'FIRE-01',
+        name: 'BFP Batasan Fire Substation',
+        category: 'FIRE',
+        categoryLabel: 'Fire (BFP)',
+        catColor: '#F97316',
+        address: 'IBP Road, Quezon City',
+        phone: '02-8951-4321',
+        distance: 1.5
+      },
+      {
+        id: 'DRRMO-01',
+        name: 'Quezon City DRRMO Disaster Operations',
+        category: 'DRRMO',
+        categoryLabel: 'Disaster DRRMO',
+        catColor: '#F59E0B',
+        address: 'QC Hall Complex, Diliman',
+        phone: '122',
+        distance: 2.1
+      },
+      {
+        id: 'DPWH-01',
+        name: 'DPWH Road & Infrastructure Disaster Operations',
+        category: 'DRRMO',
+        categoryLabel: 'Road Hazards (DPWH)',
+        catColor: '#D97706',
+        address: 'National Public Works Command Center',
+        phone: '165-02',
+        distance: 2.5
+      },
+      {
+        id: 'PRC-01',
+        name: 'Philippine Red Cross National Operations',
+        category: 'HOSPITAL',
+        categoryLabel: 'Red Cross / ER',
+        catColor: '#DC2626',
+        address: 'National Red Cross Command Center',
+        phone: '143',
+        distance: 2.9
+      }
+    ];
+
+    function openDirectoryView() {
+      document.getElementById('homeView').style.display = 'none';
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('directoryView').style.display = 'flex';
+      const locSub = document.getElementById('dirLocationSubtitle');
+      if (locSub) locSub.innerText = `Near ${currentAddress} (5km Radius)`;
+      renderDirectoryStations();
+    }
+
+    function closeDirectoryView() {
+      document.getElementById('directoryView').style.display = 'none';
+      document.getElementById('homeView').style.display = 'flex';
+      updateMaxDrag();
+    }
+
+    function filterDirectoryCategory(cat) {
+      selectedDirCategory = cat;
+      const chips = ['All', 'Barangay', 'Police', 'Hospital', 'Drrmo', 'Fire'];
+      chips.forEach(c => {
+        const el = document.getElementById('chip' + c);
+        if (el) el.classList.remove('active');
+      });
+      const activeEl = document.getElementById('chip' + (cat === 'ALL' ? 'All' : cat.charAt(0) + cat.slice(1).toLowerCase()));
+      if (activeEl) activeEl.classList.add('active');
+      renderDirectoryStations();
+    }
+
+    function renderDirectoryStations() {
+      const container = document.getElementById('directoryStationsList');
+      if (!container) return;
+
+      const filtered = localStations.filter(s => {
+        if (selectedDirCategory === 'ALL') return true;
+        return s.category === selectedDirCategory;
+      }).sort((a, b) => {
+        const aPinned = a.id === pinnedStationId ? 1 : 0;
+        const bPinned = b.id === pinnedStationId ? 1 : 0;
+        if (bPinned !== aPinned) return bPinned - aPinned;
+        return a.distance - b.distance;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div style="text-align: center; padding: 30px 10px; color: #94A3B8; font-size: 13px;">No stations found for this category.<br><span style="color: #FF334B; cursor: pointer;" onclick="filterDirectoryCategory('ALL')">View All (5km)</span></div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(s => {
+        const isPinned = s.id === pinnedStationId;
+        return `
+          <div class="sub-section-card" style="border: ${isPinned ? '1.5px solid #F59E0B' : '1px solid #263964'}; background: ${isPinned ? '#16284a' : '#162544'};">
+            ${isPinned ? '<div style="font-size: 10px; font-weight: 900; color: #F59E0B; margin-bottom: 6px; letter-spacing: 0.5px;">★ PRIMARY SOS TARGET (AUTO-DIALED FIRST)</div>' : ''}
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+              <div style="flex: 1;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span class="badge-pill" style="background: ${s.catColor}20; color: ${s.catColor}; border: 1px solid ${s.catColor}; font-size: 9px; padding: 2px 6px;">${s.categoryLabel}</span>
+                  <span class="badge-pill" style="font-size: 9px; padding: 2px 6px;">${s.distance}km away</span>
+                </div>
+                <div style="font-size: 14px; font-weight: 800; color: #F8FAFC; margin-top: 6px; line-height: 18px;">${s.name}</div>
+                <div style="font-size: 11px; color: #94A3B8; margin-top: 2px;">${s.address}</div>
+                <div style="font-size: 13px; font-weight: 900; color: #FF334B; margin-top: 8px;">${s.phone}</div>
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                <button onclick="togglePinWebStation('${s.id}')" style="background: ${isPinned ? '#F59E0B' : '#101C36'}; color: ${isPinned ? '#000' : '#F8FAFC'}; border: 1px solid ${isPinned ? '#F59E0B' : '#263964'}; border-radius: 8px; padding: 4px 8px; font-size: 10px; font-weight: 800; cursor: pointer;">
+                  ${isPinned ? '★ Pinned' : '☆ Pin SOS'}
+                </button>
+                <button onclick="callStationDirect('${s.phone}', '${s.name}')" style="background: #1B5E20; color: white; border: none; border-radius: 8px; padding: 6px 12px; font-size: 11px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                  <span>📞</span> Call
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function togglePinWebStation(id) {
+      if (pinnedStationId === id) {
+        pinnedStationId = null;
+        localStorage.removeItem('resqlink_pinned_station');
+      } else {
+        pinnedStationId = id;
+        localStorage.setItem('resqlink_pinned_station', id);
+        const pinned = localStations.find(s => s.id === id);
+        if (pinned) {
+          alert(`[PINNED AS PRIMARY SOS TARGET]:\n\n${pinned.name} (${pinned.phone})\n\nWhenever you trigger SOS or speak a distress phrase, ResQLink AI will auto-call this station first!`);
+        }
+      }
+      renderDirectoryStations();
+      updateCallPriorityUI();
+    }
+
+    function callStationDirect(number, name) {
+      const simLabel = configuredSimPref === 'SIM_1' ? 'SIM 1' : (configuredSimPref === 'SIM_2' ? 'SIM 2' : 'Default SIM');
+      alert(`[DIRECT CALL]:\nDialing: ${name}\nNumber: ${number}\nLine: ${simLabel}\n\nVia cellular telephony ACTION_CALL.`);
+    }
+
+    function triggerWebAiHotlineScan() {
+      const btn = document.getElementById('btnTriggerAiScan');
+      const icon = document.getElementById('aiRadarIcon');
+      const title = document.getElementById('aiScanTitle');
+      const sub = document.getElementById('aiScanSubtitle');
+
+      btn.disabled = true;
+      btn.innerText = 'Scanning...';
+      icon.innerText = '⏳';
+      title.innerText = 'Gemini 3.1 Flash Scanning 5km...';
+      sub.innerText = `Searching Barangay, PNP & ER near ${currentAddress}`;
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerText = '⚡ Scan AI';
+        icon.innerText = '📡';
+        title.innerText = '5km AI Hotline Scanner';
+        sub.innerText = 'Last scanned: Just now (Gemini 3.1 Flash-Lite)';
+
+        alert(`[AI 5KM DISCOVERY COMPLETE]:\n\nGemini 3.1 Flash-Lite verified 5 local stations within 5km of (${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}).\n\n✓ Local Barangay Hall emergency contact confirmed.\n✓ PNP Station precinct hotlines updated.\n✓ 24/7 Trauma ER contact cached in offline SQLite.`);
+        renderDirectoryStations();
+      }, 1400);
+    }
+
+    // ================= ACCIDENT VOICE ASSIST & DISPATCHER HANDOVER SIMULATION =================
+    let vaCycle = 1;
+    let vaCycleTimer = null;
+    let vaIsHandoverComplete = false;
+    let currentElevenLabsAudio = null;
+
+    function onVoicePersonaChange(val) {
+      localStorage.setItem('resqlink_voice_persona', val);
+    }
+
+    function getSelectedVoicePersona() {
+      return document.getElementById('cfgVoiceSelect')?.value || localStorage.getItem('resqlink_voice_persona') || HARDCODED_ELEVENLABS_VOICE_ID;
+    }
+
+    function getBestBrowserVoice() {
+      if (!('speechSynthesis' in window)) return null;
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+      
+      const natural = voices.find(v => (v.name.includes('Natural') || v.name.includes('Neural')) && v.lang.startsWith('en'))
+        || voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+        || voices.find(v => v.name.includes('Jenny') || v.name.includes('Aria') || v.name.includes('Guy'))
+        || voices.find(v => v.name.includes('Samantha') || v.name.includes('Victoria') || v.name.includes('Karen'))
+        || voices.find(v => v.lang === 'en-US')
+        || voices.find(v => v.lang.startsWith('en'));
+      return natural || voices[0];
+    }
+
+    /**
+     * Synthesizes audio using ElevenLabs Multilingual v2 soft voice (Tagalog & English),
+     * cascading to Google Gemini 2.0 Flash Audio, and finally browser Web Speech.
+     */
+    async function synthesizeSpeechAudio(text) {
+      const voiceId = getSelectedVoicePersona();
+      const elKey = HARDCODED_ELEVENLABS_KEY.trim();
+      const geminiVoiceKey = HARDCODED_GEMINI_VOICE_KEY.trim();
+
+      // 1. ElevenLabs Multilingual v2 (Priority: Soft Bilingual Tagalog/English Voice)
+      if (elKey && !['Aoede', 'Kore', 'Fenrir', 'Charon', 'Puck'].includes(voiceId)) {
+        try {
+          const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: 'POST',
+            headers: {
+              'xi-api-key': elKey,
+              'Content-Type': 'application/json',
+              'Accept': 'audio/mpeg'
+            },
+            body: JSON.stringify({
+              text: text,
+              model_id: "eleven_multilingual_v2",
+              voice_settings: {
+                stability: 0.65,
+                similarity_boost: 0.85,
+                style: 0.0,
+                use_speaker_boost: true
+              }
+            })
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const voiceLabel = (voiceId === 'EXAVITQu4vr4xnSDxMaL') ? 'Sarah (Soft Voice)' : (voiceId === 'hpp4J3VqNfWAUOO0d1Us' ? 'Bella' : 'Rachel');
+            return {
+              audio: new Audio(url),
+              engineLabel: `ElevenLabs HD Multilingual v2 [${voiceLabel} • Tagalog & English]`
+            };
+          }
+        } catch (err) {
+          console.warn('ElevenLabs API call error, falling back to Gemini Audio', err);
+        }
+      }
+
+      // 2. Google Gemini 2.0 Flash Audio Fallback
+      if (geminiVoiceKey) {
+        const geminiVoice = ['Aoede', 'Kore', 'Fenrir', 'Charon', 'Puck'].includes(voiceId) ? voiceId : "Aoede";
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiVoiceKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Speak this emergency announcement clearly and calmly: " + text }] }],
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: geminiVoice }
+                  }
+                }
+              }
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (b64) {
+              return {
+                audio: new Audio("data:audio/wav;base64," + b64),
+                engineLabel: `Google Gemini 2.0 Flash Audio (${geminiVoice})`
+              };
+            }
+          }
+        } catch (err) {
+          console.warn('Gemini Voice synthesis failed, falling back to Web Speech', err);
+        }
+      }
+
+      return null;
+    }
+
+    async function testEmergencyVoice() {
+      const phrase = "Emergency alert from ResQLink AI. System check operational. Narito na po ang tulong para sa pasyente.";
+      const synth = await synthesizeSpeechAudio(phrase);
+
+      if (synth && synth.audio) {
+        if (currentElevenLabsAudio) {
+          currentElevenLabsAudio.pause();
+        }
+        currentElevenLabsAudio = synth.audio;
+        synth.audio.play().catch(e => {
+          fallbackWebSpeech(phrase);
+        });
+      } else {
+        fallbackWebSpeech(phrase);
+      }
+    }
+
+    function startVoiceAssistSimulation(triggerReason) {
+      clearInterval(countdownInterval);
+      closeEmergencyHud();
+
+      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const user = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
+      const blood = localStorage.getItem('resqlink_blood') || 'O+';
+      const allergies = localStorage.getItem('resqlink_allergies') || 'Penicillin';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+
+      const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
+      const stNum = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
+      const pinned = (configuredCallPriority === 'LOCAL_HOTLINE' && pinnedStationId) ? localStations.find(s => s.id === pinnedStationId) : null;
+      const targetName = (configuredCallPriority === 'FAMILY_FIRST') ? `Family — ${iceName}` : ((configuredCallPriority === 'UNIVERSAL_911') ? 'Universal 911 Dispatch' : (pinned ? pinned.name : stName));
+      const targetPhone = (configuredCallPriority === 'FAMILY_FIRST') ? icePhone : ((configuredCallPriority === 'UNIVERSAL_911') ? '911' : (pinned ? pinned.phone : stNum));
+
+      // Update HUD elements
+      document.getElementById('vaTargetTitle').innerText = targetName;
+      document.getElementById('vaTargetSubtitle').innerText = `Connected Line: ${targetPhone} • Speakerphone Engaged`;
+      document.getElementById('vaPatientName').innerText = user;
+      document.getElementById('vaBloodType').innerText = blood;
+      document.getElementById('vaAllergies').innerText = allergies;
+
+      // Reset state
+      vaCycle = 1;
+      vaIsHandoverComplete = false;
+      document.getElementById('vaStatusPill').style.background = '#7F1D1D';
+      document.getElementById('vaStatusPill').style.borderColor = '#EF4444';
+      document.getElementById('vaStatusDot').style.background = '#EF4444';
+      document.getElementById('vaStatusText').innerText = `AI VOICE ASSIST • SPEAKERPHONE MAX (CYCLE 1/3)`;
+      document.getElementById('vaTranscriptHeader').style.color = '#FF5252';
+      document.getElementById('vaTranscriptHeader').innerHTML = `<span>🔊</span><span>AI SPOKEN DISPATCH (TO DISPATCHER)</span>`;
+      document.getElementById('vaDetectedWordsBox').style.display = 'none';
+      document.getElementById('vaDispatcherQaBox').style.display = 'none';
+      if (document.getElementById('vaDispatcherChipsContainer')) {
+        document.getElementById('vaDispatcherChipsContainer').style.display = 'block';
+      }
+      document.getElementById('btnManualTakeOver').style.display = 'flex';
+      document.getElementById('btnSimulateSpeech').disabled = false;
+      document.getElementById('btnSimulateSpeech').style.opacity = '1';
+
+      // Reset waveform bars to red
+      document.querySelectorAll('.va-bar').forEach(b => {
+        b.style.background = '#EF4444';
+      });
+
+      // Show HUD
+      document.getElementById('voiceAssistHud').classList.add('show');
+
+      // Play emergency speech broadcast
+      playEmergencyBroadcastCycle();
+    }
+
+    async function playEmergencyBroadcastCycle() {
+      if (vaIsHandoverComplete) return;
+
+      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const cleanUser = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
+      const blood = localStorage.getItem('resqlink_blood') || 'O+';
+      const allergies = localStorage.getItem('resqlink_allergies') || 'None documented';
+      const cleanLocation = currentAddress.replace(/location\s*coordinates.*/gi, '').replace(/google.*/gi, '').trim() || 'Metro Manila area';
+
+      const script = `Emergency alert from ResQLink AI. Emergency alert. The patient is currently unresponsive following an accident. Exact location: ${cleanLocation}. Patient name: ${cleanUser}. Blood type: ${blood}. Known allergies: ${allergies}. Mangyaring magpadala agad ng ambulansya o rescuer sa nasabing lokasyon. The line is open on speakerphone. ResQLink AI is actively monitoring the patient.`;
+
+      document.getElementById('vaLiveTranscript').innerHTML = `
+        <div style="color: #38BDF8; font-weight: 800; margin-bottom: 4px;">⚡ Synthesizing emergency broadcast audio...</div>
+        <div style="font-size: 11px; color: #94A3B8;">Voice Persona: ${getSelectedVoicePersona()}</div>
+      `;
+
+      const synth = await synthesizeSpeechAudio(script);
+      const isSynthetic = synth && synth.audio;
+      const engineLabel = isSynthetic ? synth.engineLabel : 'Natural Emergency Voice (Speech API Fallback)';
+
+      document.getElementById('vaStatusText').innerText = `AI VOICE ASSIST • ${isSynthetic ? 'HD VOICE STREAM' : 'SPEAKERPHONE MAX'} (CYCLE ${vaCycle}/3)`;
+      document.getElementById('vaLiveTranscript').innerHTML = `
+        <div style="color: ${isSynthetic ? '#38BDF8' : '#60A5FA'}; font-weight: 800; margin-bottom: 4px;">
+          [Voice Engine: ${engineLabel} • Cycle ${vaCycle} of 3]:
+        </div>
+        ${script}
+      `;
+
+      if (isSynthetic) {
+        if (currentElevenLabsAudio) {
+          currentElevenLabsAudio.pause();
+        }
+        currentElevenLabsAudio = synth.audio;
+        synth.audio.onended = () => {
+          handleCyclePause();
+        };
+        synth.audio.play().catch(e => {
+          console.warn('Audio play error, falling back to Web Speech', e);
+          fallbackWebSpeech(script);
+        });
+      } else {
+        fallbackWebSpeech(script);
+      }
+    }
+
+    function fallbackWebSpeech(script) {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(script);
+        const bestVoice = getBestBrowserVoice();
+        if (bestVoice) {
+          utter.voice = bestVoice;
+        }
+        utter.rate = 0.98;
+        utter.pitch = 1.05;
+        utter.lang = 'en-US';
+
+        utter.onend = () => {
+          handleCyclePause();
+        };
+
+        window.speechSynthesis.speak(utter);
+      }
+    }
+
+    function handleCyclePause() {
+      if (!vaIsHandoverComplete && vaCycle < 3) {
+        document.getElementById('vaLiveTranscript').innerHTML += `
+          <div style="color: #94A3B8; font-style: italic; margin-top: 8px;">[Pausing 5 seconds before cycle ${vaCycle + 1} repeat...]</div>
+        `;
+        vaCycleTimer = setTimeout(() => {
+          if (!vaIsHandoverComplete) {
+            vaCycle++;
+            playEmergencyBroadcastCycle();
+          }
+        }, 5000);
+      } else if (!vaIsHandoverComplete) {
+        document.getElementById('vaLiveTranscript').innerHTML += `
+          <div style="color: #10B981; font-weight: 800; margin-top: 8px;">[Broadcast completed. Speakerphone line remains 100% open for responders.]</div>
+        `;
+      }
+    }
+
+    async function simulateDispatcherQuestion(question) {
+      if (vaIsHandoverComplete) return;
+
+      clearTimeout(vaCycleTimer);
+      if (currentElevenLabsAudio) {
+        currentElevenLabsAudio.pause();
+        currentElevenLabsAudio = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+
+      // SLM Classifier and Telemetry Grounding
+      const q = question.toLowerCase();
+      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const cleanUser = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
+      const blood = localStorage.getItem('resqlink_blood') || 'O+';
+      const allergies = localStorage.getItem('resqlink_allergies') || 'None documented';
+      const cleanLocation = currentAddress.replace(/location\s*coordinates.*/gi, '').replace(/google.*/gi, '').trim() || 'Metro Manila area';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+
+      let answer = "";
+      // 1. Strict Priority: In-Person Physical Scene Assessment Guardrail
+      const inPersonTerms = ["bleeding", "bleed", "blood coming", "trapped", "stuck", "ipit", "naipit", "fire", "sunog", "smoke", "usok", "wound", "sugat", "fracture", "broken", "eyes open", "breathing"];
+      if (inPersonTerms.some(t => q.includes(t))) {
+        answer = "I do not know. The patient is unresponsive and device sensors cannot confirm physical scene conditions. Please dispatch paramedics for on-scene assessment.";
+      } else if (q.includes("conscious") || q.includes("awake") || q.includes("gising") || q.includes("hear")) {
+        answer = "The patient is unresponsive to audio and touch prompts. The device has been stationary for 2 minutes following impact. Voice recognition is standing by if they wake up.";
+      } else if (q.includes("crash") || q.includes("severity") || q.includes("impact") || q.includes("force")) {
+        answer = "Device accelerometer registered a severe collision impact of 5.6 Gs approximately 95 seconds ago, followed by complete stillness.";
+      } else if (q.includes("landmark") || q.includes("where") || q.includes("location") || q.includes("address")) {
+        answer = `The exact position is ${cleanLocation}. Device is stationary at this location.`;
+      } else if (q.includes("allergy") || q.includes("allergies") || q.includes("medical") || q.includes("condition")) {
+        answer = `Profile records for ${cleanUser}: Blood type is ${blood}. Allergies: ${allergies}.`;
+      } else if (q.includes("contact") || q.includes("family") || q.includes("relative") || q.includes("phone")) {
+        answer = `Primary safety contact on file: ${iceName} at phone number ${icePhone}.`;
+      } else {
+        answer = "I do not know. The patient is unresponsive and device sensors cannot confirm physical scene conditions. Please dispatch paramedics for on-scene assessment.";
+      }
+
+      // Update HUD Q&A box
+      document.getElementById('vaDispatcherQaBox').style.display = 'block';
+      document.getElementById('vaDispatcherQuestionText').innerText = `"${question}"`;
+      document.getElementById('vaDispatcherAnswerText').innerText = `"${answer}"`;
+
+      // Speak answer aloud with ElevenLabs Multilingual (Sarah Soft Voice) with fallback
+      const synth = await synthesizeSpeechAudio(answer);
+      if (synth && synth.audio) {
+        currentElevenLabsAudio = synth.audio;
+        synth.audio.play().catch(e => {
+          fallbackWebSpeech(answer);
+        });
+      } else {
+        fallbackWebSpeech(answer);
+      }
+    }
+
+    function simulatePatientSpeaking(words) {
+      if (vaIsHandoverComplete) return;
+      document.getElementById('vaDetectedWordsText').innerText = words;
+      document.getElementById('vaDetectedWordsBox').style.display = 'block';
+
+      // Automatically trigger handover with user words!
+      performVoiceAssistHandover(`Patient spoke: "${words}"`);
+    }
+
+    function performVoiceAssistHandover(reason) {
+      if (vaIsHandoverComplete) return;
+      vaIsHandoverComplete = true;
+      clearTimeout(vaCycleTimer);
+
+      if (currentElevenLabsAudio) {
+        currentElevenLabsAudio.pause();
+        currentElevenLabsAudio = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+
+      if (document.getElementById('vaDispatcherChipsContainer')) {
+        document.getElementById('vaDispatcherChipsContainer').style.display = 'none';
+      }
+
+      // Update HUD to Handover State
+      document.getElementById('vaStatusPill').style.background = '#064E3B';
+      document.getElementById('vaStatusPill').style.borderColor = '#10B981';
+      document.getElementById('vaStatusDot').style.background = '#10B981';
+      document.getElementById('vaStatusText').innerText = `LIVE LINE ACTIVE • PATIENT CONSCIOUS`;
+      document.getElementById('vaTranscriptHeader').style.color = '#10B981';
+      document.getElementById('vaTranscriptHeader').innerHTML = `<span>🗣️</span><span>DISPATCHER HANDOVER PROTOCOL COMPLETE</span>`;
+
+      // Turn waveform green
+      document.querySelectorAll('.va-bar').forEach(b => {
+        b.style.background = '#10B981';
+      });
+
+      const handoverScript = `Attention dispatcher: The patient is now conscious and speaking directly to you. Handing over the line now. Narito na po ang pasyente.`;
+
+      document.getElementById('vaLiveTranscript').innerHTML = `
+        <div style="color: #10B981; font-weight: 800; margin-bottom: 6px;">[AI HANDOVER ANNOUNCEMENT TO DISPATCHER]:</div>
+        <div style="color: #F8FAFC; margin-bottom: 10px;">"${handoverScript}"</div>
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 8px; padding: 8px; color: #6EE7B7; font-weight: 700;">
+          ✓ Trigger: ${reason}<br>
+          ✓ AI Voice Assist silenced.<br>
+          ✓ Phone microphone is 100% open to the patient.
+        </div>
+      `;
+
+      document.getElementById('btnManualTakeOver').style.display = 'none';
+      document.getElementById('btnSimulateSpeech').disabled = true;
+      document.getElementById('btnSimulateSpeech').style.opacity = '0.5';
+
+      synthesizeSpeechAudio(handoverScript).then(synth => {
+        if (synth && synth.audio) {
+          if (currentElevenLabsAudio) {
+            currentElevenLabsAudio.pause();
+          }
+          currentElevenLabsAudio = synth.audio;
+          synth.audio.play().catch(e => {
+            fallbackWebSpeech(handoverScript);
+          });
+        } else {
+          fallbackWebSpeech(handoverScript);
+        }
+      });
+    }
+
+    function endVoiceAssistCall() {
+      clearTimeout(vaCycleTimer);
+      if (currentElevenLabsAudio) {
+        currentElevenLabsAudio.pause();
+        currentElevenLabsAudio = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      document.getElementById('voiceAssistHud').classList.remove('show');
+      alert(`[EMERGENCY CALL ENDED]:\n\nAI Voice Assist session ended.\nSpeakerphone audio restored to normal mode.`);
+    }
+
+    // ================= FULL 5KM EMERGENCY MAP LOGIC =================
+    let previewLeafletMap = null;
+    let mapPerimeterCircle = null;
+    let mapUserMarker = null;
+    let mapStationMarkersLayer = null;
+    let selectedMapCategory = 'ALL';
+    let selectedMapItemId = null;
+
+    function getMapItems() {
+      // Gather contacts from session / storage
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+
+      const contacts = [
+        {
+          id: 'ICE-01',
+          name: iceName,
+          category: 'CONTACTS',
+          categoryLabel: 'ICE Primary Contact',
+          catColor: '#8B5CF6',
+          icon: '👥',
+          address: 'Family Residence / Diliman',
+          phone: icePhone,
+          distance: 0.6,
+          lat: currentLat + 0.0042,
+          lng: currentLng + 0.0035,
+          isContact: true,
+          relationship: 'Spouse / Family'
+        },
+        {
+          id: 'ICE-02',
+          name: 'Carlos Dela Cruz',
+          category: 'CONTACTS',
+          categoryLabel: 'Trusted Contact',
+          catColor: '#8B5CF6',
+          icon: '👥',
+          address: 'Commonwealth Ave, Quezon City',
+          phone: '0918-555-4321',
+          distance: 1.8,
+          lat: currentLat - 0.0118,
+          lng: currentLng + 0.0104,
+          isContact: true,
+          relationship: 'Brother'
+        }
+      ];
+
+      // Station offsets around user GPS
+      const stations = localStations.map((s) => {
+        let latOff = 0, lngOff = 0, icon = '📍';
+        if (s.category === 'HOSPITAL') { latOff = 0.0084; lngOff = 0.0076; icon = '🏥'; }
+        else if (s.category === 'POLICE') { latOff = -0.0062; lngOff = 0.0058; icon = '👮'; }
+        else if (s.category === 'FIRE') { latOff = -0.0098; lngOff = -0.0082; icon = '🚒'; }
+        else if (s.category === 'BARANGAY') { latOff = 0.0028; lngOff = -0.0031; icon = '🏛️'; }
+        else if (s.category === 'DRRMO') { latOff = 0.0135; lngOff = -0.0142; icon = '🏛️'; }
+
+        return {
+          ...s,
+          lat: currentLat + latOff,
+          lng: currentLng + lngOff,
+          icon: icon,
+          isContact: false
+        };
+      });
+
+      return [...stations, ...contacts];
+    }
+
+    function openMapView() {
+      document.getElementById('homeView').style.display = 'none';
+      document.getElementById('settingsView').style.display = 'none';
+      document.getElementById('directoryView').style.display = 'none';
+      document.getElementById('mapView').style.display = 'flex';
+
+      const sub = document.getElementById('mapViewSubtitle');
+      if (sub) sub.innerText = currentAddress ? `Near ${currentAddress}` : '5km Emergency Defense Zone';
+
+      setTimeout(() => {
+        initOrUpdateLeafletMap();
+      }, 50);
+    }
+
+    function closeMapView() {
+      document.getElementById('mapView').style.display = 'none';
+      document.getElementById('homeView').style.display = 'flex';
+      updateMaxDrag();
+    }
+
+    function recenterPreviewMap() {
+      if (previewLeafletMap) {
+        previewLeafletMap.setView([currentLat, currentLng], 14, { animate: true });
+        if (mapUserMarker) {
+          mapUserMarker.openPopup();
+        }
+      }
+    }
+
+    function filterMapCategory(cat) {
+      selectedMapCategory = cat;
+      const chips = ['ALL', 'HOSPITAL', 'POLICE', 'FIRE', 'BARANGAY', 'CONTACTS'];
+      chips.forEach(c => {
+        const el = document.getElementById('mapChip' + c);
+        if (el) el.classList.remove('active');
+      });
+      const activeEl = document.getElementById('mapChip' + cat);
+      if (activeEl) activeEl.classList.add('active');
+
+      renderMapMarkersAndCards();
+    }
+
+    function initOrUpdateLeafletMap() {
+      if (typeof L === 'undefined') {
+        console.warn('Leaflet not loaded yet');
+        return;
+      }
+
+      const mapContainer = document.getElementById('previewLeafletMap');
+      if (!mapContainer) return;
+
+      if (!previewLeafletMap) {
+        previewLeafletMap = L.map('previewLeafletMap', {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([currentLat, currentLng], 14);
+
+        // CartoDB Dark Matter free tiles
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 19,
+          subdomains: 'abcd'
+        }).addTo(previewLeafletMap);
+
+        // 5km Radius Circle
+        mapPerimeterCircle = L.circle([currentLat, currentLng], {
+          radius: 5000,
+          color: '#E53935',
+          weight: 1.5,
+          dashArray: '6, 6',
+          fillColor: '#E53935',
+          fillOpacity: 0.05
+        }).addTo(previewLeafletMap);
+
+        // Pulsing User GPS Marker
+        const userIcon = L.divIcon({
+          className: 'user-pulse-marker',
+          html: '<div class="user-pulse-ring"></div><div class="user-pulse-dot"></div>',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+
+        mapUserMarker = L.marker([currentLat, currentLng], { icon: userIcon })
+          .addTo(previewLeafletMap)
+          .bindPopup(`
+            <div class="popup-title">📍 Your Real GPS Location</div>
+            <div class="popup-dist">${currentAddress}</div>
+            <div style="font-size: 10px; color: #94A3B8;">(${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})</div>
+          `);
+
+        mapStationMarkersLayer = L.layerGroup().addTo(previewLeafletMap);
+      } else {
+        previewLeafletMap.invalidateSize();
+        previewLeafletMap.setView([currentLat, currentLng], 14);
+        if (mapPerimeterCircle) mapPerimeterCircle.setLatLng([currentLat, currentLng]);
+        if (mapUserMarker) {
+          mapUserMarker.setLatLng([currentLat, currentLng]);
+          mapUserMarker.setPopupContent(`
+            <div class="popup-title">📍 Your Real GPS Location</div>
+            <div class="popup-dist">${currentAddress}</div>
+            <div style="font-size: 10px; color: #94A3B8;">(${currentLat.toFixed(4)}, ${currentLng.toFixed(4)})</div>
+          `);
+        }
+      }
+
+      renderMapMarkersAndCards();
+    }
+
+    function createSvgPin(color, emoji) {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+          <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.73-6.27-14-14-14z" fill="${color}" stroke="#FFFFFF" stroke-width="1.5"/>
+          <text x="14" y="18" font-size="12" text-anchor="middle" dominant-baseline="central">${emoji}</text>
+        </svg>
+      `;
+      return L.divIcon({
+        className: 'custom-cat-pin',
+        html: svg,
+        iconSize: [28, 36],
+        iconAnchor: [14, 36],
+        popupAnchor: [0, -32]
+      });
+    }
+
+    function renderMapMarkersAndCards() {
+      if (!mapStationMarkersLayer) return;
+      mapStationMarkersLayer.clearLayers();
+
+      const allItems = getMapItems();
+      const filtered = allItems.filter(item => {
+        if (selectedMapCategory === 'ALL') return true;
+        if (selectedMapCategory === 'CONTACTS') return item.isContact;
+        if (selectedMapCategory === 'BARANGAY') return item.category === 'BARANGAY' || item.category === 'DRRMO';
+        return item.category === selectedMapCategory;
+      }).sort((a, b) => a.distance - b.distance);
+
+      const countEl = document.getElementById('mapCarouselCount');
+      if (countEl) countEl.innerText = `${filtered.length} found`;
+
+      const cardsContainer = document.getElementById('mapCardsRow');
+      if (!cardsContainer) return;
+
+      const markerRefs = {};
+
+      filtered.forEach(item => {
+        const pinIcon = createSvgPin(item.catColor, item.icon);
+        const marker = L.marker([item.lat, item.lng], { icon: pinIcon }).addTo(mapStationMarkersLayer);
+
+        const popupHtml = `
+          <div class="popup-title">${item.name}</div>
+          <div class="popup-cat" style="color: ${item.catColor}">${item.categoryLabel} • ${item.distance}km away</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-bottom: 4px;">${item.address}</div>
+          <div style="font-size: 11px; font-weight: 800; color: #FF334B; margin-bottom: 6px;">Hotline: ${item.phone}</div>
+          <button class="popup-btn" onclick="callStationDirect('${item.phone}', '${item.name}')">📞 Call ${item.phone}</button>
+          <button class="popup-btn popup-nav-btn" onclick="openGoogleNavigation(${item.lat}, ${item.lng})">↗ Turn-by-Turn Navigation</button>
+        `;
+
+        marker.bindPopup(popupHtml);
+        markerRefs[item.id] = marker;
+
+        marker.on('click', () => {
+          selectMapItem(item.id, false);
+        });
+      });
+
+      if (filtered.length === 0) {
+        cardsContainer.innerHTML = `<div style="color: #94A3B8; font-size: 12px; padding: 12px; text-align: center; width: 100%;">No stations found for this category within 5km.</div>`;
+        return;
+      }
+
+      cardsContainer.innerHTML = filtered.map(item => {
+        const isSelected = item.id === selectedMapItemId;
+        return `
+          <div class="map-station-card ${isSelected ? 'selected' : ''}" id="mapCard_${item.id}" onclick="selectMapItem('${item.id}', true)">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="badge-pill" style="background: ${item.catColor}25; color: ${item.catColor}; border: 1px solid ${item.catColor}; font-size: 9px; padding: 2px 6px;">
+                  ${item.icon} ${item.categoryLabel}
+                </span>
+                <span style="font-size: 10px; font-weight: 800; color: #10B981;">${item.distance}km</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 800; color: #F8FAFC; margin-top: 6px; line-height: 16px;">${item.name}</div>
+              <div style="font-size: 10px; color: #94A3B8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.address}</div>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <button onclick="event.stopPropagation(); callStationDirect('${item.phone}', '${item.name}')" style="flex: 1; background: #1B5E20; color: white; border: none; border-radius: 8px; padding: 6px 8px; font-size: 10px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <span>📞</span> Call
+              </button>
+              <button onclick="event.stopPropagation(); openGoogleNavigation(${item.lat}, ${item.lng})" style="flex: 1; background: #0284C7; color: white; border: none; border-radius: 8px; padding: 6px 8px; font-size: 10px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                <span>↗</span> Route
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      window._mapMarkers = markerRefs;
+    }
+
+    function selectMapItem(id, panMap) {
+      selectedMapItemId = id;
+      document.querySelectorAll('.map-station-card').forEach(c => c.classList.remove('selected'));
+      const activeCard = document.getElementById('mapCard_' + id);
+      if (activeCard) {
+        activeCard.classList.add('selected');
+        activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+
+      if (window._mapMarkers && window._mapMarkers[id]) {
+        const marker = window._mapMarkers[id];
+        if (panMap && previewLeafletMap) {
+          previewLeafletMap.panTo(marker.getLatLng(), { animate: true });
+        }
+        marker.openPopup();
+      }
+    }
+
+    function openGoogleNavigation(lat, lng) {
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+    }
+
+    // Initialize session
+    checkSession();
+  </script>
+</body>
+</html>

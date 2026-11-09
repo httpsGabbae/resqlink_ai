@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download ResQLink AI — Hands-Free Emergency Response</title>
+  <meta name="description" content="Download ResQLink AI for Android. Offline voice distress detection ('Resqlink Tulong!'), 5km emergency radar, and accident voice assist.">
+  <link rel="icon" href="resqlink_logo.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #060D1E;
+      --card-bg: #0E1A35;
+      --card-border: #1E2D4F;
+      --red-sos: #EF4444;
+      --red-hover: #DC2626;
+      --emerald: #10B981;
+      --amber: #F59E0B;
+      --cyan: #38BDF8;
+      --text-white: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-white);
+      line-height: 1.6;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(239, 68, 68, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 75%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.05) 0%, transparent 50%);
+      background-attachment: fixed;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navigation */
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(6, 13, 30, 0.85);
+    }
+
+    .nav-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-white);
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      object-fit: cover;
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.4);
+    }
+
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-nav {
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-nav-outline {
+      border: 1px solid var(--card-border);
+      color: var(--text-white);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .btn-nav-outline:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--cyan);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 70px 0 60px;
+      text-align: center;
+    }
+
+    .release-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: var(--emerald);
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 24px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.4); }
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 900;
+      line-height: 1.15;
+      letter-spacing: -1.5px;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, #FFFFFF 30%, #CBD5E1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 36px;
+      font-weight: 500;
+    }
+
+    /* Download Box */
+    .download-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 28px;
+      padding: 36px;
+      max-width: 720px;
+      margin: 0 auto 50px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(239, 68, 68, 0.15);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .download-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #EF4444, #F59E0B, #10B981, #38BDF8);
+    }
+
+    .download-cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 28px;
+      align-items: center;
+      justify-content: space-between;
+      text-align: left;
+    }
+
+    .cta-left {
+      flex: 1;
+      min-width: 260px;
+    }
+
+    .cta-left h3 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-white);
+      margin-bottom: 6px;
+    }
+
+    .meta-tags {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .meta-tag {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    .btn-download-main {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+      color: #FFFFFF;
+      padding: 16px 32px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(239, 68, 68, 0.45);
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .btn-download-main:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(239, 68, 68, 0.6);
+      filter: brightness(1.1);
+    }
+
+    .btn-download-main:active {
+      transform: translateY(1px);
+    }
+
+    .cta-qr-box {
+      text-align: center;
+      background: #FFFFFF;
+      padding: 16px;
+      border-radius: 18px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+      width: 170px;
+    }
+
+    .cta-qr-box canvas, .cta-qr-box img {
+      width: 138px;
+      height: 138px;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .qr-caption {
+      color: #0F172A;
+      font-size: 11px;
+      font-weight: 800;
+      margin-top: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Features Grid */
+    .features-section {
+      padding: 40px 0 80px;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: 30px;
+      font-weight: 900;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .section-desc {
+      text-align: center;
+      font-size: 15px;
+      color: var(--text-muted);
+      max-width: 550px;
+      margin: 0 auto 40px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 26px;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(56, 189, 248, 0.4);
+    }
+
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 14px;
+      display: inline-block;
+    }
+
+    .feature-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text-white);
+      margin-bottom: 8px;
+    }
+
+    .feature-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Steps Section */
+    .install-section {
+      background: rgba(14, 26, 53, 0.6);
+      border-top: 1px solid var(--card-border);
+      border-bottom: 1px solid var(--card-border);
+      padding: 60px 0;
+    }
+
+    .steps-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 24px;
+      margin-top: 36px;
+    }
+
+    .step-box {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px;
+      position: relative;
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      background: var(--red-sos);
+      color: white;
+      font-weight: 900;
+      font-size: 14px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+
+    .step-box h4 {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .step-box p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* Specs Table */
+    .specs-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px 30px;
+      margin-top: 40px;
+    }
+
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 18px;
+    }
+
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spec-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+    }
+
+    .spec-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-white);
+      margin-top: 2px;
+    }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: var(--cyan);
+    }
+
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 34px; }
+      .download-card { padding: 24px; }
+      .download-cta-row { flex-direction: column; text-align: center; }
+      .cta-qr-box { margin: 0 auto; }
+      .meta-tags { justify-content: center; }
+    }
+  </style>
+  <!-- Fast QR Code Generation -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header>
+    <div class="container nav-content">
+      <a href="download.html" class="brand">
+        <img src="resqlink_logo.jpg" alt="ResQLink AI Logo" onerror="this.src='data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'44\' height=\'44\' viewBox=\'0 0 44 44\'><rect width=\'44\' height=\'44\' rx=\'12\' fill=\'%23EF4444\'/><text x=\'50%25\' y=\'55%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-size=\'22\' fill=\'white\'>🚨</text></svg>'">
+        <div>
+          <div class="brand-title">ResQLink AI</div>
+          <div style="font-size: 10px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;">5KM TACTICAL DEFENSE</div>
+        </div>
+      </a>
+      <div class="nav-actions">
+        <a href="preview.html" target="_blank" class="btn-nav btn-nav-outline">
+          🌐 Launch Web Preview
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="release-badge">
+        <span class="pulse-dot"></span>
+        Latest Stable Release • v1.3.0
+      </div>
+      <h1>Hands-Free Offline Emergency Response</h1>
+      <p class="hero-subtitle">
+        Wake-phrase detection (<em>"Resqlink Tulong!"</em>), automated 5km local hotline discovery, and accident voice assist for Android devices.
+      </p>
+
+      <!-- Main Download Card -->
+      <div class="download-card">
+        <div class="download-cta-row">
+          <div class="cta-left">
+            <h3>ResQLink AI for Android</h3>
+            <div class="meta-tags">
+              <span class="meta-tag">📦 APK File</span>
+              <span class="meta-tag">📏 35.9 MB</span>
+              <span class="meta-tag">🤖 Android 8.0+</span>
+              <span class="meta-tag">🔒 Hardcoded AI Engine</span>
+            </div>
+            <a href="ResQLink-v1.3.0.apk" download="ResQLink-v1.3.0.apk" class="btn-download-main" id="apkDownloadBtn">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Download ResQLink APK (v1.3.0)</span>
+            </a>
+            <div style="margin-top: 10px; font-size: 11px; color: var(--text-dim);">
+              ✓ Direct APK download • No Google Play Store account required
+            </div>
+          </div>
+
+          <!-- QR Code to Scan on Mobile -->
+          <div class="cta-qr-box">
+            <canvas id="qrCanvas"></canvas>
+            <div class="qr-caption">Scan to Download</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Official Emergency Hotlines Card (Kaya Natin PH Reference) -->
+      <div style="max-width: 720px; margin: -20px auto 40px; background: #070E1E; border: 1.5px solid rgba(239, 68, 68, 0.6); border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: left;">
+        <div style="background: linear-gradient(90deg, #7F1D1D 0%, #EF4444 50%, #991B1B 100%); padding: 12px 20px; text-align: center;">
+          <h3 style="font-size: 18px; font-weight: 900; color: #FFFFFF; letter-spacing: 1px; margin: 0;">EMERGENCY HOTLINES</h3>
+          <p style="font-size: 11px; color: rgba(255, 255, 255, 0.9); font-weight: 700; text-transform: uppercase; margin-top: 3px;">In case of emergency, you may contact the following hotline numbers</p>
+        </div>
+        <div style="padding: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+          <!-- 1. National Emergency Hotline -->
+          <div style="background: #0D1933; border: 1px solid #1E2D4F; border-radius: 12px; padding: 12px 14px;">
+            <div style="background: #EF4444; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 8px; border-radius: 4px; display: inline-block;">NATIONAL EMERGENCY HOTLINE</div>
+            <div style="font-size: 26px; font-weight: 900; color: #FFFFFF; margin-top: 4px; letter-spacing: 1px;">911</div>
+            <div style="font-size: 11px; color: #94A3B8;">Universal Dispatch • Police, Fire, Ambulance</div>
+          </div>
+          <!-- 2. PNP -->
+          <div style="background: #0D1933; border: 1px solid #1E2D4F; border-radius: 12px; padding: 12px 14px;">
+            <div style="background: #2563EB; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 8px; border-radius: 4px; display: inline-block;">PHILIPPINE NATIONAL POLICE</div>
+            <div style="font-size: 26px; font-weight: 900; color: #FFFFFF; margin-top: 4px; letter-spacing: 1px;">117</div>
+            <div style="font-size: 11px; color: #94A3B8;">PNP Patrol 117 Command Operations</div>
+          </div>
+          <!-- 3. Red Cross -->
+          <div style="background: #0D1933; border: 1px solid #1E2D4F; border-radius: 12px; padding: 12px 14px;">
+            <div style="background: #DC2626; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 8px; border-radius: 4px; display: inline-block;">PHILIPPINE RED CROSS</div>
+            <div style="font-size: 20px; font-weight: 900; color: #FFFFFF; margin-top: 6px;">143 <span style="font-size: 14px; font-weight: 600; color: #94A3B8;">or 8527-000</span></div>
+            <div style="font-size: 11px; color: #94A3B8;">Blood Bank, Ambulance & Disaster Relief</div>
+          </div>
+          <!-- 4. DPWH -->
+          <div style="background: #0D1933; border: 1px solid #1E2D4F; border-radius: 12px; padding: 12px 14px;">
+            <div style="background: #D97706; color: #FFFFFF; font-size: 10px; font-weight: 900; padding: 2px 8px; border-radius: 4px; display: inline-block;">DPWH (ROAD & PUBLIC WORKS)</div>
+            <div style="font-size: 24px; font-weight: 900; color: #FFFFFF; margin-top: 4px;">165-02</div>
+            <div style="font-size: 11px; color: #94A3B8;">Road Obstructions, Landslides & Bridge Hazards</div>
+          </div>
+        </div>
+        <div style="background: #081226; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #1E2D4F;">
+          <span style="font-size: 11px; color: #64748B;">Source: @KayaNatinPH • kayanatin.ph</span>
+          <span style="font-size: 11px; color: #10B981; font-weight: 800;">Integrated into ResQLink AI Offline Database</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Features -->
+  <section class="features-section">
+    <div class="container">
+      <h2 class="section-title">Engineered for Critical Seconds</h2>
+      <p class="section-desc">Designed from the ground up to protect lives when you cannot reach or operate your phone.</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🎙️</div>
+          <h3 class="feature-title">Always-Listening Wake Word</h3>
+          <p class="feature-text">
+            Trained offline speech recognition strictly listens for <strong>"Resqlink Tulong!"</strong> or super-distress <strong>"Tulong!"</strong>. Raw shouting, claps, or door bangs are rejected to eliminate false alarms.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🚨</div>
+          <h3 class="feature-title">Heads-Up Alert & Alarm Siren</h3>
+          <p class="feature-text">
+            Continuous repeating vibration and loud emergency alarm siren with full screen wake-up. Displays a heads-up pop-up over any running app with 1-tap <strong>[CANCEL]</strong> and <strong>[CALL NOW]</strong> controls.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🗺️</div>
+          <h3 class="feature-title">5km Tactical Defense Radar</h3>
+          <p class="feature-text">
+            Interactive map with offline emergency station caching. Gemini 3.1 Flash-Lite continuously resolves local police, fire, and hospitals within a 5km radius of your live coordinates.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🗣️</div>
+          <h3 class="feature-title">Accident Voice Assist (Sarah)</h3>
+          <p class="feature-text">
+            If 10 seconds elapse with no response, speakerphone broadcasts your GPS coordinates and medical vitals in gentle bilingual Tagalog/English. Hands back control immediately when you speak.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">📶</div>
+          <h3 class="feature-title">Smart Dual-SIM Priority</h3>
+          <p class="feature-text">
+            Configure emergency calls and parallel GPS SMS alerts to automatically dial through your preferred carrier slot (Smart, Globe, DITO) with zero prompt delays.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <h3 class="feature-title">Offline Reliability</h3>
+          <p class="feature-text">
+            Cellular telephony and offline SQLite databases ensure direct 911 and family dialing functions even with zero mobile data or Wi-Fi internet coverage.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step-by-Step Android Installation Guide -->
+  <section class="install-section">
+    <div class="container">
+      <h2 class="section-title">How to Install on Android</h2>
+      <p class="section-desc">Follow these 4 simple steps to install the APK file directly on your phone.</p>
+
+      <div class="steps-row">
+        <div class="step-box">
+          <div class="step-num">1</div>
+          <h4>Download APK</h4>
+          <p>Tap the download button above or scan the QR code using your phone's camera.</p>
+        </div>
+
+        <div class="step-box">
+          <div class="step-num">2</div>
+          <h4>Confirm Download</h4>
+          <p>If Chrome displays <em>"File might be harmful"</em>, tap <strong>Download anyway</strong> (standard warning for developer APKs).</p>
+        </div>
+
+        <div class="step-box">
+          <div class="step-num">3</div>
+          <h4>Allow Install</h4>
+          <p>Open the downloaded file. If prompted, tap <strong>Settings</strong> and enable <em>"Allow from this source"</em>, then tap <strong>Install</strong>.</p>
+        </div>
+
+        <div class="step-box">
+          <div class="step-num">4</div>
+          <h4>Grant Permissions</h4>
+          <p>Launch ResQLink AI and allow Microphone and Location access so Guardian Mode can protect you hands-free.</p>
+        </div>
+      </div>
+
+      <!-- App Specifications -->
+      <div class="specs-card">
+        <div class="specs-grid">
+          <div class="spec-item">
+            <span class="spec-label">Application</span>
+            <span class="spec-val">ResQLink AI</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Package Name</span>
+            <span class="spec-val">com.resqlink.ai</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Version</span>
+            <span class="spec-val">1.3.0 (Build 4)</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Android OS</span>
+            <span class="spec-val">Android 8.0 to Android 15</span>
+          </div>
+          <div class="spec-item">
+            <span class="spec-label">Voice AI Model</span>
+            <span class="spec-val">Sarah (Bilingual) + Dual Gemini</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>© 2026 ResQLink AI. All rights reserved. • <a href="preview.html" target="_blank">Test Web Preview</a></p>
+    </div>
+  </footer>
+
+  <!-- Generate dynamic QR code matching the exact download URL -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      // Build absolute download link
+      const downloadUrl = new URL('ResQLink-v1.3.0.apk', window.location.href).href;
+      const downloadBtn = document.getElementById('apkDownloadBtn');
+      if (downloadBtn) {
+        downloadBtn.href = downloadUrl;
+      }
+
+      // Render QR code pointing to this download page so users can scan from mobile
+      const qrCanvas = document.getElementById('qrCanvas');
+      if (typeof QRCode !== 'undefined' && qrCanvas) {
+        QRCode.toCanvas(qrCanvas, downloadUrl, {
+          width: 138,
+          margin: 1,
+          color: {
+            dark: '#0F172A',
+            light: '#FFFFFF'
+          }
+        }, function (error) {
+          if (error) console.error("QR Code Error:", error);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
