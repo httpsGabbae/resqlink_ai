@@ -48,6 +48,9 @@ import com.resqlink.ai.ui.emergency.EmergencyViewModel
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * Filter categories for stations rendered on the interactive map.
+ */
 enum class MapFilterCategory(val label: String, val icon: ImageVector) {
     ALL("All", Icons.Default.Public),
     HOSPITALS("Hospitals", Icons.Default.LocalHospital),
@@ -57,6 +60,23 @@ enum class MapFilterCategory(val label: String, val icon: ImageVector) {
     CONTACTS("ICE Contacts", Icons.Default.People)
 }
 
+/**
+ * =========================================================================================
+ * 5KM EMERGENCY MAP SCREEN
+ * =========================================================================================
+ * Educational Overview:
+ * This screen renders a tactical, dark-themed offline map displaying:
+ * 1. The user's live GPS beacon with pulsating concentric rings.
+ * 2. Range rings denoting 1km, 3km, and 5km defense zones around the user.
+ * 3. Color-coded emergency responder pins (Hospitals, Police, Fire, Barangay/DRRMO).
+ * 4. Offline Leaflet JavaScript engine bundled directly inside assets/leaflet.
+ *    If the device is completely offline with no cellular data, it displays a tactical
+ *    radar grid with exact coordinate markers, ensuring 100% availability in typhoons
+ *    and network blackouts.
+ * 5. JavaScript bridge (`ResQBridge`) enabling two-way communication between Leaflet
+ *    HTML markers and native Android dialer/navigation intents.
+ * =========================================================================================
+ */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MapScreen(
@@ -65,86 +85,86 @@ fun MapScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val currentLocation by viewModel.currentLocation.collectAsState()
-    val allHotlines by viewModel.allHotlines.collectAsState()
-    val nearestHotlines by viewModel.nearestHotlines.collectAsState()
-    val trustedContacts by viewModel.trustedContacts.collectAsState()
-    val userProfile by viewModel.userProfile.collectAsState()
+    val currentDeviceLocation by viewModel.currentLocation.collectAsState()
+    val allHotlinesList by viewModel.allHotlines.collectAsState()
+    val nearestHotlinesList by viewModel.nearestHotlines.collectAsState()
+    val trustedContactsList by viewModel.trustedContacts.collectAsState()
+    val userProfileData by viewModel.userProfile.collectAsState()
 
-    var selectedCategory by remember { mutableStateOf(MapFilterCategory.ALL) }
-    var selectedHotline by remember { mutableStateOf<Hotline?>(null) }
-    var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var selectedFilterCategory by remember { mutableStateOf(MapFilterCategory.ALL) }
+    var selectedHotlinePin by remember { mutableStateOf<Hotline?>(null) }
+    var selectedContactPin by remember { mutableStateOf<TrustedContact?>(null) }
+    var webViewInstanceReference by remember { mutableStateOf<WebView?>(null) }
 
-    // Intercept hardware/gesture back to return to main tabs
+    // Intercept hardware and gesture back button to dismiss inspection panels first
     BackHandler {
-        if (selectedHotline != null || selectedContact != null) {
-            selectedHotline = null
-            selectedContact = null
+        if (selectedHotlinePin != null || selectedContactPin != null) {
+            selectedHotlinePin = null
+            selectedContactPin = null
         } else {
             onBack()
         }
     }
 
-    val userLat = currentLocation?.latitude ?: 14.6507
-    val userLng = currentLocation?.longitude ?: 121.0509
-    val userAddress = currentLocation?.address ?: "Current Location"
+    val userLatitude = currentDeviceLocation?.latitude ?: 14.6507
+    val userLongitude = currentDeviceLocation?.longitude ?: 121.0509
+    val userAddressLabel = currentDeviceLocation?.address ?: "Current Location"
 
     // Load bundled local Leaflet CSS and JS (Guarantees zero-network offline functionality)
-    val leafletCss = remember { LeafletAssetLoader.getCss(context) }
-    val leafletJs = remember { LeafletAssetLoader.getJs(context) }
+    val localLeafletCss = remember { LeafletAssetLoader.getCss(context) }
+    val localLeafletJs = remember { LeafletAssetLoader.getJs(context) }
 
     // All hotlines loaded into the map coordinate space (persisted across categories)
-    val allMapHotlines = remember(allHotlines, nearestHotlines) {
-        (nearestHotlines + allHotlines).distinctBy { it.id }
+    val allUniqueMapHotlines = remember(allHotlinesList, nearestHotlinesList) {
+        (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
     }
 
-    // Deduplicated hotlines list for bottom drawer (filtered by category)
-    val displayHotlines = remember(allHotlines, nearestHotlines, selectedCategory) {
-        val merged = (nearestHotlines + allHotlines).distinctBy { it.id }
-        when (selectedCategory) {
-            MapFilterCategory.ALL -> merged
-            MapFilterCategory.HOSPITALS -> merged.filter { it.category == HotlineCategory.MEDICAL_HOSPITAL }
-            MapFilterCategory.POLICE -> merged.filter { it.category == HotlineCategory.POLICE_PNP }
-            MapFilterCategory.FIRE -> merged.filter { it.category == HotlineCategory.FIRE_BFP }
-            MapFilterCategory.BARANGAY -> merged.filter {
+    // Deduplicated hotlines list for bottom drawer carousel (filtered by category)
+    val displayedDrawerHotlines = remember(allHotlinesList, nearestHotlinesList, selectedFilterCategory) {
+        val mergedList = (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
+        when (selectedFilterCategory) {
+            MapFilterCategory.ALL -> mergedList
+            MapFilterCategory.HOSPITALS -> mergedList.filter { it.category == HotlineCategory.MEDICAL_HOSPITAL }
+            MapFilterCategory.POLICE -> mergedList.filter { it.category == HotlineCategory.POLICE_PNP }
+            MapFilterCategory.FIRE -> mergedList.filter { it.category == HotlineCategory.FIRE_BFP }
+            MapFilterCategory.BARANGAY -> mergedList.filter {
                 it.category == HotlineCategory.BARANGAY || it.category == HotlineCategory.DISASTER_DRRMO
             }
             MapFilterCategory.CONTACTS -> emptyList()
         }
     }
 
-    // Build self-contained Leaflet HTML (recomputed only when GPS or station dataset updates)
-    val mapHtml = remember(userLat, userLng, allMapHotlines, trustedContacts, leafletCss, leafletJs) {
+    // Build self-contained Leaflet HTML (recomputed only when GPS coordinates or stations update)
+    val completeMapHtmlDocument = remember(userLatitude, userLongitude, allUniqueMapHotlines, trustedContactsList, localLeafletCss, localLeafletJs) {
         generateLeafletMapHtml(
-            leafletCss = leafletCss,
-            leafletJs = leafletJs,
-            userLat = userLat,
-            userLng = userLng,
-            userAddress = userAddress,
-            hotlines = allMapHotlines,
-            contacts = trustedContacts,
-            primaryContactName = userProfile.primaryContactName,
-            primaryContactPhone = userProfile.primaryContactPhone,
+            leafletCss = localLeafletCss,
+            leafletJs = localLeafletJs,
+            userLat = userLatitude,
+            userLng = userLongitude,
+            userAddress = userAddressLabel,
+            hotlines = allUniqueMapHotlines,
+            contacts = trustedContactsList,
+            primaryContactName = userProfileData.primaryContactName,
+            primaryContactPhone = userProfileData.primaryContactPhone,
             mapboxToken = com.resqlink.ai.data.local.AppConfig.MAPBOX_ACCESS_TOKEN
         )
     }
 
-    // JavaScript Interface to receive calls and navigation commands from the map
-    val jsBridge = remember {
+    // JavaScript Bridge to receive clicks and actions from within the web canvas
+    val javaScriptBridge = remember {
         object {
             @JavascriptInterface
             fun onStationClick(stationId: String) {
-                val found = (nearestHotlines + allHotlines).find { it.id == stationId }
-                selectedHotline = found
-                selectedContact = null
+                val matchedStation = (nearestHotlinesList + allHotlinesList).find { it.id == stationId }
+                selectedHotlinePin = matchedStation
+                selectedContactPin = null
             }
 
             @JavascriptInterface
             fun onContactClick(contactId: Long) {
-                val found = trustedContacts.find { it.id == contactId }
-                selectedContact = found
-                selectedHotline = null
+                val matchedContact = trustedContactsList.find { it.id == contactId }
+                selectedContactPin = matchedContact
+                selectedHotlinePin = null
             }
 
             @JavascriptInterface
@@ -153,14 +173,14 @@ fun MapScreen(
             }
 
             @JavascriptInterface
-            fun openNavigation(lat: Double, lng: Double, label: String) {
+            fun openNavigation(latitude: Double, longitude: Double, stationName: String) {
                 try {
-                    val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")).apply {
+                    val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude($stationName)")).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(mapIntent)
                 } catch (e: Exception) {
-                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng")).apply {
+                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude")).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(browserIntent)
@@ -177,21 +197,21 @@ fun MapScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // 1. Top Header Bar
+            // 1. Top Header Bar with re-centering and external map shortcut
             MapTopBar(
-                userAddress = userAddress,
+                userAddress = userAddressLabel,
                 onBack = onBack,
                 onRecenter = {
-                    webViewRef?.evaluateJavascript("recenterUser($userLat, $userLng);", null)
+                    webViewInstanceReference?.evaluateJavascript("recenterUser($userLatitude, $userLongitude);", null)
                 },
                 onOpenExternalMaps = {
                     try {
-                        val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$userLat,$userLng?q=$userLat,$userLng(My+Location)")).apply {
+                        val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$userLatitude,$userLongitude?q=$userLatitude,$userLongitude(My+Location)")).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(mapIntent)
                     } catch (e: Exception) {
-                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$userLat,$userLng")).apply {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=$userLatitude,$userLongitude")).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(browserIntent)
@@ -201,10 +221,10 @@ fun MapScreen(
 
             // 2. Category Filter Chips (Dynamic JavaScript marker filter with zero page reload)
             CategoryChipsRow(
-                selected = selectedCategory,
-                onSelect = { cat ->
-                    selectedCategory = cat
-                    val jsCat = when (cat) {
+                selected = selectedFilterCategory,
+                onSelect = { categoryChoice ->
+                    selectedFilterCategory = categoryChoice
+                    val javaScriptCategoryFilter = when (categoryChoice) {
                         MapFilterCategory.ALL -> "ALL"
                         MapFilterCategory.HOSPITALS -> "MEDICAL_HOSPITAL"
                         MapFilterCategory.POLICE -> "POLICE_PNP"
@@ -212,20 +232,20 @@ fun MapScreen(
                         MapFilterCategory.BARANGAY -> "BARANGAY"
                         MapFilterCategory.CONTACTS -> "CONTACTS"
                     }
-                    webViewRef?.evaluateJavascript("if (window.filterCategory) { filterCategory('$jsCat'); }", null)
+                    webViewInstanceReference?.evaluateJavascript("if (window.filterCategory) { filterCategory('$javaScriptCategoryFilter'); }", null)
                 }
             )
 
-            // 3. Interactive Leaflet Dark Map in Box (Guaranteed flicker-free)
-            var lastLoadedHtml by remember { mutableStateOf("") }
+            // 3. Interactive Leaflet Map Box
+            var lastLoadedHtmlString by remember { mutableStateOf("") }
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             ) {
                 AndroidView(
-                    factory = { ctx ->
-                        WebView(ctx).apply {
+                    factory = { viewContext ->
+                        WebView(viewContext).apply {
                             setBackgroundColor(0xFF0B1528.toInt())
                             settings.apply {
                                 javaScriptEnabled = true
@@ -241,28 +261,28 @@ fun MapScreen(
                                 builtInZoomControls = false
                                 displayZoomControls = false
                             }
-                            addJavascriptInterface(jsBridge, "ResQBridge")
+                            addJavascriptInterface(javaScriptBridge, "ResQBridge")
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                    val url = request?.url?.toString() ?: ""
-                                    if (url.startsWith("tel:")) {
-                                        val phone = url.removePrefix("tel:")
-                                        viewModel.directCallHotline(phone)
+                                    val destinationUrl = request?.url?.toString() ?: ""
+                                    if (destinationUrl.startsWith("tel:")) {
+                                        val phoneNumberToDial = destinationUrl.removePrefix("tel:")
+                                        viewModel.directCallHotline(phoneNumberToDial)
                                         return true
                                     }
                                     return false
                                 }
                             }
-                            loadDataWithBaseURL("file:///android_asset/leaflet/", mapHtml, "text/html", "UTF-8", null)
-                            lastLoadedHtml = mapHtml
-                            webViewRef = this
+                            loadDataWithBaseURL("file:///android_asset/leaflet/", completeMapHtmlDocument, "text/html", "UTF-8", null)
+                            lastLoadedHtmlString = completeMapHtmlDocument
+                            webViewInstanceReference = this
                         }
                     },
-                    update = { wv ->
-                        webViewRef = wv
-                        if (lastLoadedHtml != mapHtml) {
-                            lastLoadedHtml = mapHtml
-                            wv.loadDataWithBaseURL("file:///android_asset/leaflet/", mapHtml, "text/html", "UTF-8", null)
+                    update = { activeWebView ->
+                        webViewInstanceReference = activeWebView
+                        if (lastLoadedHtmlString != completeMapHtmlDocument) {
+                            lastLoadedHtmlString = completeMapHtmlDocument
+                            activeWebView.loadDataWithBaseURL("file:///android_asset/leaflet/", completeMapHtmlDocument, "text/html", "UTF-8", null)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -298,37 +318,37 @@ fun MapScreen(
                 }
             }
 
-            // 4. Bottom Detail Cards & Horizontal Carousel
+            // 4. Bottom Detail Drawer & Horizontal Carousel
             MapBottomDrawer(
-                selectedHotline = selectedHotline,
-                selectedContact = selectedContact,
-                hotlines = displayHotlines,
-                contacts = trustedContacts,
-                primaryContactName = userProfile.primaryContactName,
-                primaryContactPhone = userProfile.primaryContactPhone,
+                selectedHotline = selectedHotlinePin,
+                selectedContact = selectedContactPin,
+                hotlines = displayedDrawerHotlines,
+                contacts = trustedContactsList,
+                primaryContactName = userProfileData.primaryContactName,
+                primaryContactPhone = userProfileData.primaryContactPhone,
 
                 onDismissSelection = {
-                    selectedHotline = null
-                    selectedContact = null
+                    selectedHotlinePin = null
+                    selectedContactPin = null
                 },
                 onSelectHotline = { hotline ->
-                    selectedHotline = hotline
-                    selectedContact = null
-                    webViewRef?.evaluateJavascript("panToCoordinates(${hotline.latitude}, ${hotline.longitude});", null)
+                    selectedHotlinePin = hotline
+                    selectedContactPin = null
+                    webViewInstanceReference?.evaluateJavascript("panToCoordinates(${hotline.latitude}, ${hotline.longitude});", null)
                 },
                 onSelectContact = { contact ->
-                    selectedContact = contact
-                    selectedHotline = null
+                    selectedContactPin = contact
+                    selectedHotlinePin = null
                 },
                 onCall = { phone -> viewModel.directCallHotline(phone) },
-                onNavigate = { lat, lng, label ->
+                onNavigate = { targetLat, targetLng, targetLabel ->
                     try {
-                        val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")).apply {
+                        val mapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:$targetLat,$targetLng?q=$targetLat,$targetLng($targetLabel)")).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(mapIntent)
                     } catch (e: Exception) {
-                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$lat,$lng")).apply {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$targetLat,$targetLng")).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         }
                         context.startActivity(browserIntent)
@@ -339,6 +359,9 @@ fun MapScreen(
     }
 }
 
+/**
+ * Top app bar displaying user locality and map navigation actions.
+ */
 @Composable
 fun MapTopBar(
     userAddress: String,
@@ -399,7 +422,7 @@ fun MapTopBar(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Re-center button
+                // Re-center button: re-focuses map on current user beacon
                 IconButton(
                     onClick = onRecenter,
                     modifier = Modifier
@@ -439,6 +462,9 @@ fun MapTopBar(
     }
 }
 
+/**
+ * Filter row displaying category selector chips.
+ */
 @Composable
 fun CategoryChipsRow(
     selected: MapFilterCategory,
@@ -483,6 +509,10 @@ fun CategoryChipsRow(
     }
 }
 
+/**
+ * Bottom drawer displaying either a detailed card for a tapped station/contact,
+ * or a horizontal carousel of all discovered emergency stations and ICE family contacts.
+ */
 @Composable
 fun MapBottomDrawer(
     selectedHotline: Hotline?,
@@ -538,7 +568,7 @@ fun MapBottomDrawer(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // ICE Primary Card
+                    // ICE Primary Contact Card
                     item {
                         Card(
                             shape = RoundedCornerShape(12.dp),
@@ -686,6 +716,9 @@ fun MapBottomDrawer(
     }
 }
 
+/**
+ * Detailed view for an individual emergency station.
+ */
 @Composable
 fun HotlineDetailCard(
     hotline: Hotline,
@@ -728,9 +761,9 @@ fun HotlineDetailCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    hotline.distanceKm?.let {
+                    hotline.distanceKm?.let { distance ->
                         Text(
-                            text = "${it}km away",
+                            text = "${distance}km away",
                             color = Color(0xFF10B981),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -796,6 +829,9 @@ fun HotlineDetailCard(
     }
 }
 
+/**
+ * Detailed view for an individual ICE contact.
+ */
 @Composable
 fun ContactDetailCard(
     contact: TrustedContact,
@@ -869,7 +905,7 @@ fun ContactDetailCard(
 }
 
 /**
- * Thread-safe cached loader for locally bundled Leaflet library assets.
+ * Thread-safe cached asset loader for locally bundled Leaflet library files.
  * Guarantees zero network latency, instant DOM execution, and 100% offline uptime.
  */
 object LeafletAssetLoader {
@@ -902,9 +938,12 @@ object LeafletAssetLoader {
 }
 
 /**
- * Builds high-performance interactive Leaflet Map HTML with CartoDB dark theme tiles,
- * bundled local Leaflet engine, 5km radius defense perimeter, custom category marker pins,
- * and seamless offline tactical radar grid fallback.
+ * Generates self-contained Leaflet HTML document containing:
+ * - Embedded CSS & JavaScript.
+ * - Mapbox or CartoDB Dark Matter tile layer with OpenStreetMap fallback.
+ * - Concentric defense rings (1km, 3km, 5km).
+ * - Custom SVG pin icons for hospitals, police, fire, and barangay stations.
+ * - Interactive popups with direct call & external navigation links.
  */
 fun generateLeafletMapHtml(
     leafletCss: String,
@@ -1055,7 +1094,7 @@ fun generateLeafletMapHtml(
 
           window.resqMap = map;
 
-          // CartoDB Dark Matter tiles with OpenStreetMap fallback and transparent error tiles
+          // CartoDB Dark Matter tiles with Mapbox and OpenStreetMap fallback
           const mapboxToken = "$mapboxToken";
           const darkTiles = L.tileLayer((mapboxToken && mapboxToken.length > 10) ? 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
@@ -1112,7 +1151,7 @@ fun generateLeafletMapHtml(
             .addTo(map)
             .bindPopup('<div class="popup-title">Your GPS Location</div><div class="popup-dist">$userAddress</div>');
 
-          // Function to create category SVG icon
+          // Helper to create category SVG icon
           function createCategoryPin(color, emoji) {
             const svg = `
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">

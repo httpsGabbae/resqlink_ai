@@ -40,6 +40,9 @@ import com.resqlink.ai.domain.model.SimPreference
 import com.resqlink.ai.domain.model.UserProfile
 import com.resqlink.ai.ui.emergency.*
 
+/**
+ * Enumeration of sub-sections inside the Settings destination.
+ */
 enum class SettingsSubSection {
     NONE,
     CALL_PRIORITY,
@@ -50,6 +53,30 @@ enum class SettingsSubSection {
     ABOUT_POLICY
 }
 
+/**
+ * =========================================================================================
+ * SETTINGS SCREEN
+ * =========================================================================================
+ * Educational Overview:
+ * This screen manages all user preferences, emergency routing policies, and hardware
+ * configurations for ResQLink AI:
+ *
+ * 1. EMERGENCY CALL ROUTING & DUAL-SIM:
+ *    Configures whether hands-free SOS auto-dials the nearest 5km station, universal 911,
+ *    or family first. Also configures which physical SIM card slot handles outgoing calls.
+ *
+ * 2. PERSONAL & MEDICAL PROFILE:
+ *    Stores blood type, allergies, and critical health notes 100% locally on the phone.
+ *
+ * 3. GUARDIAN VOICE AI & SENSORS:
+ *    Enables background acoustic keyword spotting ("Resqlink Tulong!") and experimental
+ *    g-force impact detection.
+ *
+ * 4. SYSTEM PERMISSIONS & POLICY:
+ *    Provides transparency on required Android system privileges (Microphone, Location,
+ *    Phone, SMS) and details fail-soft emergency policies.
+ * =========================================================================================
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -59,20 +86,20 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val userProfile by viewModel.userProfile.collectAsState()
-    val contacts by viewModel.trustedContacts.collectAsState()
-    val currentLocation by viewModel.currentLocation.collectAsState()
-    val emergencyState by viewModel.emergencyState.collectAsState()
-    val isGuardianActive = emergencyState is EmergencyState.GuardianActive || viewModel.isGuardianModeEnabled()
-    val detectedSims = remember { viewModel.getDetectedSims() }
+    val userProfileData by viewModel.userProfile.collectAsState()
+    val trustedContactsList by viewModel.trustedContacts.collectAsState()
+    val currentDeviceLocation by viewModel.currentLocation.collectAsState()
+    val currentEmergencyState by viewModel.emergencyState.collectAsState()
+    val isGuardianServiceActive = currentEmergencyState is EmergencyState.GuardianActive || viewModel.isGuardianModeEnabled()
+    val detectedHardwareSims = remember { viewModel.getDetectedSims() }
 
-    var activeSubSection by remember { mutableStateOf(initialSubSection) }
-    var showLogoutConfirm by remember { mutableStateOf(false) }
+    var activeSettingsSubSection by remember { mutableStateOf(initialSubSection) }
+    var isLogoutConfirmationVisible by remember { mutableStateOf(false) }
 
-    // Intercept hardware and gesture back button to back up hierarchically
+    // Intercept hardware and gesture back button to navigate backwards hierarchically
     BackHandler {
-        if (activeSubSection != SettingsSubSection.NONE) {
-            activeSubSection = SettingsSubSection.NONE
+        if (activeSettingsSubSection != SettingsSubSection.NONE) {
+            activeSettingsSubSection = SettingsSubSection.NONE
         } else {
             onBack()
         }
@@ -84,7 +111,7 @@ fun SettingsScreen(
             .background(NavyBackground)
             .statusBarsPadding()
     ) {
-        // Fixed Top App Bar (Never scrolls off; fully respects notch & status bar)
+        // Fixed Top App Bar
         Surface(
             color = NavyBackground,
             modifier = Modifier.fillMaxWidth()
@@ -97,8 +124,8 @@ fun SettingsScreen(
             ) {
                 IconButton(
                     onClick = {
-                        if (activeSubSection != SettingsSubSection.NONE) {
-                            activeSubSection = SettingsSubSection.NONE
+                        if (activeSettingsSubSection != SettingsSubSection.NONE) {
+                            activeSettingsSubSection = SettingsSubSection.NONE
                         } else {
                             onBack()
                         }
@@ -120,7 +147,7 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.width(14.dp))
 
                 Text(
-                    text = when (activeSubSection) {
+                    text = when (activeSettingsSubSection) {
                         SettingsSubSection.NONE -> "Settings"
                         SettingsSubSection.CALL_PRIORITY -> "Emergency Call Routing"
                         SettingsSubSection.ACCOUNT_MEDICAL -> "Edit Medical Profile"
@@ -140,7 +167,7 @@ fun SettingsScreen(
             }
         }
 
-        // Scrollable content below the fixed top bar
+        // Scrollable content area
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -148,17 +175,14 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-
-            // ================= SUB-SECTIONS / DRILL DOWNS WITH ANIMATED SLIDE =================
+            // Animated slide transitions between main settings menu and sub-sections
             AnimatedContent(
-                targetState = activeSubSection,
+                targetState = activeSettingsSubSection,
                 transitionSpec = {
                     if (targetState != SettingsSubSection.NONE && initialState == SettingsSubSection.NONE) {
-                        // Forward into sub-section: slide in from right
                         (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(320))) togetherWith
                                 (slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 3 } + fadeOut(tween(200)))
                     } else if (targetState == SettingsSubSection.NONE) {
-                        // Back to main settings list: slide back to right
                         (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { -it / 3 } + fadeIn(tween(320))) togetherWith
                                 (slideOutHorizontally(tween(320, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(200)))
                     } else {
@@ -166,41 +190,41 @@ fun SettingsScreen(
                     }
                 },
                 label = "settingsSubSectionAnim"
-            ) { currentSub ->
-                when (currentSub) {
+            ) { currentSubSection ->
+                when (currentSubSection) {
                     SettingsSubSection.CALL_PRIORITY -> {
                         CallPrioritySubSectionView(
-                            currentPriority = userProfile.callPriority,
-                            currentSimPreference = userProfile.simPreference,
-                            primaryContactName = userProfile.primaryContactName,
-                            detectedSims = detectedSims,
-                            onSelectPriority = { priority ->
-                                viewModel.updateCallPriority(priority)
+                            currentPriority = userProfileData.callPriority,
+                            currentSimPreference = userProfileData.simPreference,
+                            primaryContactName = userProfileData.primaryContactName,
+                            detectedSims = detectedHardwareSims,
+                            onSelectPriority = { newPriority ->
+                                viewModel.updateCallPriority(newPriority)
                             },
-                            onSelectSimPreference = { simPref ->
-                                viewModel.updateSimPreference(simPref)
+                            onSelectSimPreference = { newSimPreference ->
+                                viewModel.updateSimPreference(newSimPreference)
                             }
                         )
                     }
 
                     SettingsSubSection.ACCOUNT_MEDICAL -> {
                         EditAccountMedicalView(
-                            profile = userProfile,
+                            profile = userProfileData,
                             onSave = { name, blood, allergies, notes, contactName, contactPhone ->
                                 viewModel.updateMedicalProfile(name, blood, allergies, notes, contactName, contactPhone)
-                                activeSubSection = SettingsSubSection.NONE
+                                activeSettingsSubSection = SettingsSubSection.NONE
                             }
                         )
                     }
 
                     SettingsSubSection.PHONEBOOK -> {
                         PhonebookSubSectionView(
-                            contacts = contacts,
-                            onAddContact = { name, phone, rel ->
-                                viewModel.addTrustedContact(name, phone, rel)
+                            contacts = trustedContactsList,
+                            onAddContact = { contactName, contactPhone, contactRelationship ->
+                                viewModel.addTrustedContact(contactName, contactPhone, contactRelationship)
                             },
-                            onDeleteContact = { id ->
-                                viewModel.removeTrustedContact(id)
+                            onDeleteContact = { contactId ->
+                                viewModel.removeTrustedContact(contactId)
                             }
                         )
                     }
@@ -208,13 +232,13 @@ fun SettingsScreen(
                     SettingsSubSection.PERMISSIONS -> {
                         PermissionsSubSectionView(
                             context = context,
-                            hasLocation = currentLocation != null
+                            hasLocation = currentDeviceLocation != null
                         )
                     }
 
                     SettingsSubSection.GUARDIAN_AI -> {
                         GuardianAiSubSectionView(
-                            isActive = isGuardianActive,
+                            isActive = isGuardianServiceActive,
                             currentApiKey = viewModel.getGeminiApiKey(),
                             onSaveApiKey = { viewModel.setGeminiApiKey(it) },
                             currentElevenLabsKey = viewModel.getElevenLabsApiKey(),
@@ -235,7 +259,7 @@ fun SettingsScreen(
 
                     SettingsSubSection.NONE -> {
                         Column {
-                            // MAIN CLEAN SETTINGS LIST (INFO HIDDEN UPFRONT)
+                            // Main settings menu items
                             Text(
                                 text = "PREFERENCES & EMERGENCY DATA",
                                 color = TextMuted,
@@ -246,55 +270,55 @@ fun SettingsScreen(
                             )
 
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                // Section 0: Emergency Call Routing & Dual-SIM
+                                // 0: Emergency Call Routing & Dual-SIM
                                 SettingsMenuItem(
                                     icon = Icons.AutoMirrored.Filled.PhoneCallback,
                                     title = "Emergency Call Routing & Dual-SIM",
-                                    subtitle = "${userProfile.callPriority.title} • ${userProfile.simPreference.title}",
+                                    subtitle = "${userProfileData.callPriority.title} • ${userProfileData.simPreference.title}",
                                     badge = "Dual-SIM",
                                     badgeColor = CrimsonGlow,
-                                    onClick = { activeSubSection = SettingsSubSection.CALL_PRIORITY }
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.CALL_PRIORITY }
                                 )
 
-                                // Section 1: Account & Medical
+                                // 1: Account & Medical
                                 SettingsMenuItem(
                                     icon = Icons.Default.MedicalServices,
                                     title = "Account & Medical Profile",
-                                    subtitle = "${userProfile.displayName} • Blood ${userProfile.bloodType} • Allergies",
+                                    subtitle = "${userProfileData.displayName} • Blood ${userProfileData.bloodType} • Allergies",
                                     badge = "Edit",
-                                    onClick = { activeSubSection = SettingsSubSection.ACCOUNT_MEDICAL }
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.ACCOUNT_MEDICAL }
                                 )
 
-                                // Section 2: Phonebook
+                                // 2: Phonebook
                                 SettingsMenuItem(
                                     icon = Icons.Default.ContactPhone,
                                     title = "Emergency Phonebook",
-                                    subtitle = "${contacts.size} authorized safety contacts for GPS alerts",
-                                    badge = "${contacts.size}",
-                                    onClick = { activeSubSection = SettingsSubSection.PHONEBOOK }
+                                    subtitle = "${trustedContactsList.size} authorized safety contacts for GPS alerts",
+                                    badge = "${trustedContactsList.size}",
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.PHONEBOOK }
                                 )
 
-                                // Section 3: Permissions
+                                // 3: Permissions
                                 SettingsMenuItem(
                                     icon = Icons.Default.Security,
                                     title = "Permissions & Privacy",
                                     subtitle = "Microphone, Location, Telephony, SMS",
                                     badge = "Active",
-                                    onClick = { activeSubSection = SettingsSubSection.PERMISSIONS }
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.PERMISSIONS }
                                 )
 
-                                // Section 4: Guardian Voice AI
+                                // 4: Guardian Voice AI
                                 SettingsMenuItem(
                                     icon = Icons.Default.Hearing,
                                     title = "Guardian Voice AI",
-                                    subtitle = if (isGuardianActive) "Always Listening • 'Resqlink Tulong!'" else "Monitoring Paused",
-                                    badge = if (isGuardianActive) "ON" else "OFF",
-                                    badgeColor = if (isGuardianActive) EmeraldSafe else TextMuted,
-                                    onClick = { activeSubSection = SettingsSubSection.GUARDIAN_AI }
+                                    subtitle = if (isGuardianServiceActive) "Always Listening • 'Resqlink Tulong!'" else "Monitoring Paused",
+                                    badge = if (isGuardianServiceActive) "ON" else "OFF",
+                                    badgeColor = if (isGuardianServiceActive) EmeraldSafe else TextMuted,
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.GUARDIAN_AI }
                                 )
 
-                                // Section 4b: Experimental Motion Distress Detection
-                                var isMotionEnabled by remember { mutableStateOf(viewModel.isExperimentalMotionDetectionEnabled()) }
+                                // 4b: Experimental Motion Distress Detection
+                                var isMotionDetectionEnabled by remember { mutableStateOf(viewModel.isExperimentalMotionDetectionEnabled()) }
                                 Surface(
                                     shape = RoundedCornerShape(14.dp),
                                     color = NavySurface,
@@ -359,10 +383,10 @@ fun SettingsScreen(
                                         }
 
                                         Switch(
-                                            checked = isMotionEnabled,
-                                            onCheckedChange = {
-                                                isMotionEnabled = it
-                                                viewModel.setExperimentalMotionDetectionEnabled(it)
+                                            checked = isMotionDetectionEnabled,
+                                            onCheckedChange = { isChecked ->
+                                                isMotionDetectionEnabled = isChecked
+                                                viewModel.setExperimentalMotionDetectionEnabled(isChecked)
                                             },
                                             colors = SwitchDefaults.colors(
                                                 checkedThumbColor = Color.White,
@@ -374,25 +398,25 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                // Section 5: About & Policy
+                                // 5: About & Policy
                                 SettingsMenuItem(
                                     icon = Icons.Default.Info,
                                     title = "About & Emergency Policy",
                                     subtitle = "ResQLink AI v1.1.0 • Fail-soft dispatch rules",
-                                    onClick = { activeSubSection = SettingsSubSection.ABOUT_POLICY }
+                                    onClick = { activeSettingsSubSection = SettingsSubSection.ABOUT_POLICY }
                                 )
                             }
 
                             Spacer(modifier = Modifier.height(28.dp))
 
-                            // LOGOUT MOVED TO BOTTOM PER USER REQUEST
+                            // Sign-out action item
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
                                 color = NavyCard,
                                 border = androidx.compose.foundation.BorderStroke(1.dp, CrimsonPrimary.copy(alpha = 0.4f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showLogoutConfirm = true }
+                                    .clickable { isLogoutConfirmationVisible = true }
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -425,9 +449,9 @@ fun SettingsScreen(
         }
     }
 
-    if (showLogoutConfirm) {
+    if (isLogoutConfirmationVisible) {
         AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
+            onDismissRequest = { isLogoutConfirmationVisible = false },
             containerColor = NavyCard,
             titleContentColor = TextPearl,
             textContentColor = TextMuted,
@@ -436,7 +460,7 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        showLogoutConfirm = false
+                        isLogoutConfirmationVisible = false
                         viewModel.logout()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)
@@ -445,7 +469,7 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutConfirm = false }) {
+                TextButton(onClick = { isLogoutConfirmationVisible = false }) {
                     Text("Cancel", color = TextPearl)
                 }
             }
@@ -453,6 +477,9 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * Standard visual row for each settings option.
+ */
 @Composable
 fun SettingsMenuItem(
     icon: ImageVector,
@@ -543,7 +570,7 @@ fun SettingsMenuItem(
 }
 
 /**
- * Sub-Section 0: Call Priority & Routing Editor
+ * Sub-Section 0: Call Priority & Dual-SIM Routing Editor
  */
 @Composable
 fun CallPrioritySubSectionView(
@@ -555,7 +582,6 @@ fun CallPrioritySubSectionView(
     onSelectSimPreference: (SimPreference) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Section 1: Primary Emergency Call Sequence
         Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = NavyCard),
@@ -703,6 +729,9 @@ fun CallPrioritySubSectionView(
     }
 }
 
+/**
+ * Radio card for picking emergency call priorities or SIM preference.
+ */
 @Composable
 fun CallPriorityOptionCard(
     title: String,
@@ -780,12 +809,12 @@ fun EditAccountMedicalView(
     profile: UserProfile,
     onSave: (name: String, blood: String, allergies: String, notes: String, contactName: String, contactPhone: String) -> Unit
 ) {
-    var name by remember { mutableStateOf(profile.displayName) }
-    var bloodType by remember { mutableStateOf(profile.bloodType) }
-    var allergies by remember { mutableStateOf(profile.allergies) }
-    var medicalNotes by remember { mutableStateOf(profile.medicalNotes) }
-    var contactName by remember { mutableStateOf(profile.primaryContactName) }
-    var contactPhone by remember { mutableStateOf(profile.primaryContactPhone) }
+    var inputName by remember { mutableStateOf(profile.displayName) }
+    var inputBloodType by remember { mutableStateOf(profile.bloodType) }
+    var inputAllergies by remember { mutableStateOf(profile.allergies) }
+    var inputMedicalNotes by remember { mutableStateOf(profile.medicalNotes) }
+    var inputContactName by remember { mutableStateOf(profile.primaryContactName) }
+    var inputContactPhone by remember { mutableStateOf(profile.primaryContactPhone) }
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -810,8 +839,8 @@ fun EditAccountMedicalView(
             )
 
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = inputName,
+                onValueChange = { inputName = it },
                 label = { Text("Full Name") },
                 singleLine = true,
                 colors = defaultTextFieldColors(),
@@ -819,8 +848,8 @@ fun EditAccountMedicalView(
             )
 
             OutlinedTextField(
-                value = bloodType,
-                onValueChange = { bloodType = it },
+                value = inputBloodType,
+                onValueChange = { inputBloodType = it },
                 label = { Text("Blood Type (e.g. O+, A+, B+, AB-)") },
                 singleLine = true,
                 colors = defaultTextFieldColors(),
@@ -828,8 +857,8 @@ fun EditAccountMedicalView(
             )
 
             OutlinedTextField(
-                value = allergies,
-                onValueChange = { allergies = it },
+                value = inputAllergies,
+                onValueChange = { inputAllergies = it },
                 label = { Text("Allergies (e.g. Penicillin, Peanuts)") },
                 singleLine = true,
                 colors = defaultTextFieldColors(),
@@ -837,16 +866,16 @@ fun EditAccountMedicalView(
             )
 
             OutlinedTextField(
-                value = medicalNotes,
-                onValueChange = { medicalNotes = it },
+                value = inputMedicalNotes,
+                onValueChange = { inputMedicalNotes = it },
                 label = { Text("Medical Conditions / Notes") },
                 colors = defaultTextFieldColors(),
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
-                value = contactName,
-                onValueChange = { contactName = it },
+                value = inputContactName,
+                onValueChange = { inputContactName = it },
                 label = { Text("Primary ICE Contact Name") },
                 singleLine = true,
                 colors = defaultTextFieldColors(),
@@ -854,8 +883,8 @@ fun EditAccountMedicalView(
             )
 
             OutlinedTextField(
-                value = contactPhone,
-                onValueChange = { contactPhone = it },
+                value = inputContactPhone,
+                onValueChange = { inputContactPhone = it },
                 label = { Text("Primary ICE Contact Phone") },
                 singleLine = true,
                 colors = defaultTextFieldColors(),
@@ -866,7 +895,7 @@ fun EditAccountMedicalView(
 
             Button(
                 onClick = {
-                    onSave(name, bloodType, allergies, medicalNotes, contactName, contactPhone)
+                    onSave(inputName, inputBloodType, inputAllergies, inputMedicalNotes, inputContactName, inputContactPhone)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = EmeraldSafe),
                 shape = RoundedCornerShape(12.dp),
@@ -889,7 +918,7 @@ fun PhonebookSubSectionView(
     onAddContact: (name: String, phone: String, rel: String) -> Unit,
     onDeleteContact: (id: Long) -> Unit
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
+    var isAddContactDialogVisible by remember { mutableStateOf(false) }
 
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -913,7 +942,7 @@ fun PhonebookSubSectionView(
                     fontWeight = FontWeight.Bold
                 )
                 Button(
-                    onClick = { showAddDialog = true },
+                    onClick = { isAddContactDialogVisible = true },
                     colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
@@ -928,7 +957,7 @@ fun PhonebookSubSectionView(
                 fontSize = 11.sp
             )
 
-            contacts.forEach { contact ->
+            contacts.forEach { contactItem ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -937,10 +966,10 @@ fun PhonebookSubSectionView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(contact.name, color = TextPearl, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("${contact.relationship} • ${contact.phoneNumber}", color = TextMuted, fontSize = 11.sp)
+                        Text(contactItem.name, color = TextPearl, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("${contactItem.relationship} • ${contactItem.phoneNumber}", color = TextMuted, fontSize = 11.sp)
                     }
-                    IconButton(onClick = { onDeleteContact(contact.id) }, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = { onDeleteContact(contactItem.id) }, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete", tint = CrimsonPrimary, modifier = Modifier.size(16.dp))
                     }
                 }
@@ -948,12 +977,12 @@ fun PhonebookSubSectionView(
         }
     }
 
-    if (showAddDialog) {
+    if (isAddContactDialogVisible) {
         AddContactSubDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { n, p, r ->
-                onAddContact(n, p, r)
-                showAddDialog = false
+            onDismiss = { isAddContactDialogVisible = false },
+            onAdd = { newName, newPhone, newRelationship ->
+                onAddContact(newName, newPhone, newRelationship)
+                isAddContactDialogVisible = false
             }
         )
     }
@@ -1017,7 +1046,7 @@ fun GuardianAiSubSectionView(
     onToggleGuardian: () -> Unit,
     onSimulateVoice: () -> Unit
 ) {
-    var sensitivity by remember { mutableStateOf(1f) }
+    var voiceSensitivityLevel by remember { mutableStateOf(1f) }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Card(
@@ -1081,8 +1110,8 @@ fun GuardianAiSubSectionView(
 
                 Text("Voice Sensitivity:", color = TextPearl, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Slider(
-                    value = sensitivity,
-                    onValueChange = { sensitivity = it },
+                    value = voiceSensitivityLevel,
+                    onValueChange = { voiceSensitivityLevel = it },
                     valueRange = 0f..2f,
                     steps = 1,
                     colors = SliderDefaults.colors(thumbColor = EmeraldSafe, activeTrackColor = EmeraldSafe)
@@ -1106,9 +1135,6 @@ fun GuardianAiSubSectionView(
             border = androidx.compose.foundation.BorderStroke(1.dp, NavyCardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
-            var apiKeyInput by remember { mutableStateOf(currentApiKey) }
-            var showSavedNotice by remember { mutableStateOf(false) }
-
             Column(
                 modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1193,8 +1219,8 @@ fun GuardianAiSubSectionView(
             border = androidx.compose.foundation.BorderStroke(1.dp, NavyCardBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
-            var elVoiceInput by remember { mutableStateOf(currentElevenLabsVoiceId) }
-            var showSavedNotice by remember { mutableStateOf(false) }
+            var selectedVoiceId by remember { mutableStateOf(currentElevenLabsVoiceId) }
+            var isVoiceUpdatedNoticeVisible by remember { mutableStateOf(false) }
 
             Column(
                 modifier = Modifier.padding(18.dp),
@@ -1280,7 +1306,7 @@ fun GuardianAiSubSectionView(
                     letterSpacing = 0.5.sp
                 )
 
-                val presets = listOf(
+                val voiceModelPresets = listOf(
                     Triple("Sarah", "EXAVITQu4vr4xnSDxMaL", "Active in All Calls • Soft Tagalog & English (Default)"),
                     Triple("Bella", "hpp4J3VqNfWAUOO0d1Us", "Warm & Professional"),
                     Triple("Rachel", "21m00Tcm4TlvDq8ikWAM", "Calm & Clear"),
@@ -1293,13 +1319,13 @@ fun GuardianAiSubSectionView(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    presets.forEach { (name, id, desc) ->
-                        val isSelected = elVoiceInput.trim().equals(id, ignoreCase = true) || (elVoiceInput.isBlank() && id == "EXAVITQu4vr4xnSDxMaL")
+                    voiceModelPresets.forEach { (voiceName, voiceId, voiceDescription) ->
+                        val isSelected = selectedVoiceId.trim().equals(voiceId, ignoreCase = true) || (selectedVoiceId.isBlank() && voiceId == "EXAVITQu4vr4xnSDxMaL")
                         Surface(
                             onClick = {
-                                elVoiceInput = id
-                                onSaveElevenLabsVoiceId(id)
-                                showSavedNotice = true
+                                selectedVoiceId = voiceId
+                                onSaveElevenLabsVoiceId(voiceId)
+                                isVoiceUpdatedNoticeVisible = true
                             },
                             shape = RoundedCornerShape(10.dp),
                             color = if (isSelected) Color(0xFF0284C7) else NavySurface,
@@ -1310,13 +1336,13 @@ fun GuardianAiSubSectionView(
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                                 Text(
-                                    text = if (isSelected) "✓ $name" else name,
+                                    text = if (isSelected) "✓ $voiceName" else voiceName,
                                     color = if (isSelected) Color.White else TextPearl,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = desc,
+                                    text = voiceDescription,
                                     color = if (isSelected) Color(0xFFE0F2FE) else TextMuted,
                                     fontSize = 9.sp
                                 )
@@ -1325,7 +1351,7 @@ fun GuardianAiSubSectionView(
                     }
                 }
 
-                if (showSavedNotice) {
+                if (isVoiceUpdatedNoticeVisible) {
                     Text(
                         text = "✓ Voice model updated!",
                         color = EmeraldSafe,
@@ -1338,30 +1364,33 @@ fun GuardianAiSubSectionView(
     }
 }
 
+/**
+ * Animated soundwave visualization component simulating live microphone activity.
+ */
 @Composable
 fun VoiceWaveVisualizer(isActive: Boolean) {
     val waveTransition = rememberInfiniteTransition(label = "audioWave")
-    val h1 by waveTransition.animateFloat(0.25f, 0.95f, infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h1")
-    val h2 by waveTransition.animateFloat(0.45f, 0.85f, infiniteRepeatable(tween(520, delayMillis = 60, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h2")
-    val h3 by waveTransition.animateFloat(0.2f, 1.0f, infiniteRepeatable(tween(340, delayMillis = 120, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h3")
-    val h4 by waveTransition.animateFloat(0.6f, 0.9f, infiniteRepeatable(tween(600, delayMillis = 40, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h4")
-    val h5 by waveTransition.animateFloat(0.35f, 1.0f, infiniteRepeatable(tween(440, delayMillis = 160, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h5")
-    val h6 by waveTransition.animateFloat(0.25f, 0.75f, infiniteRepeatable(tween(480, delayMillis = 90, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h6")
-    val h7 by waveTransition.animateFloat(0.3f, 0.9f, infiniteRepeatable(tween(360, delayMillis = 50, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h7")
+    val waveBarHeight1 by waveTransition.animateFloat(0.25f, 0.95f, infiniteRepeatable(tween(380, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h1")
+    val waveBarHeight2 by waveTransition.animateFloat(0.45f, 0.85f, infiniteRepeatable(tween(520, delayMillis = 60, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h2")
+    val waveBarHeight3 by waveTransition.animateFloat(0.2f, 1.0f, infiniteRepeatable(tween(340, delayMillis = 120, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h3")
+    val waveBarHeight4 by waveTransition.animateFloat(0.6f, 0.9f, infiniteRepeatable(tween(600, delayMillis = 40, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h4")
+    val waveBarHeight5 by waveTransition.animateFloat(0.35f, 1.0f, infiniteRepeatable(tween(440, delayMillis = 160, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h5")
+    val waveBarHeight6 by waveTransition.animateFloat(0.25f, 0.75f, infiniteRepeatable(tween(480, delayMillis = 90, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h6")
+    val waveBarHeight7 by waveTransition.animateFloat(0.3f, 0.9f, infiniteRepeatable(tween(360, delayMillis = 50, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "h7")
 
-    val heights = listOf(h1, h2, h3, h4, h5, h6, h7)
+    val waveHeightsList = listOf(waveBarHeight1, waveBarHeight2, waveBarHeight3, waveBarHeight4, waveBarHeight5, waveBarHeight6, waveBarHeight7)
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.height(28.dp)
     ) {
-        heights.forEach { animFraction ->
-            val fraction = if (isActive) animFraction else 0.2f
+        waveHeightsList.forEach { animatedFraction ->
+            val actualFraction = if (isActive) animatedFraction else 0.2f
             Box(
                 modifier = Modifier
                     .width(3.5.dp)
-                    .fillMaxHeight(fraction)
+                    .fillMaxHeight(actualFraction)
                     .clip(RoundedCornerShape(2.dp))
                     .background(if (isActive) EmeraldSafe else TextMuted.copy(alpha = 0.4f))
             )
@@ -1370,7 +1399,7 @@ fun VoiceWaveVisualizer(isActive: Boolean) {
 }
 
 /**
- * Sub-Section 5: About & Policy Sub-View
+ * Sub-Section 5: About & Emergency Fail-Soft Policy
  */
 @Composable
 fun AboutPolicySubSectionView() {
@@ -1401,6 +1430,9 @@ fun AboutPolicySubSectionView() {
     }
 }
 
+/**
+ * Individual row displaying system permission item and active status badge.
+ */
 @Composable
 fun PermissionItemRow(title: String, desc: String, isGranted: Boolean) {
     Row(
@@ -1427,14 +1459,17 @@ fun PermissionItemRow(title: String, desc: String, isGranted: Boolean) {
     }
 }
 
+/**
+ * Modal dialog inside phonebook to enter a new trusted safety contact.
+ */
 @Composable
 fun AddContactSubDialog(
     onDismiss: () -> Unit,
     onAdd: (name: String, phone: String, rel: String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var rel by remember { mutableStateOf("Family") }
+    var contactNameInput by remember { mutableStateOf("") }
+    var contactPhoneInput by remember { mutableStateOf("") }
+    var contactRelationshipInput by remember { mutableStateOf("Family") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1442,13 +1477,13 @@ fun AddContactSubDialog(
         title = { Text("Add Emergency Contact", color = TextPearl, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Phone Number") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = rel, onValueChange = { rel = it }, label = { Text("Relationship") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = contactNameInput, onValueChange = { contactNameInput = it }, label = { Text("Name") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = contactPhoneInput, onValueChange = { contactPhoneInput = it }, label = { Text("Phone Number") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = contactRelationshipInput, onValueChange = { contactRelationshipInput = it }, label = { Text("Relationship") }, colors = defaultTextFieldColors(), modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
-            Button(onClick = { if (name.isNotBlank() && phone.isNotBlank()) onAdd(name, phone, rel) }, colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)) {
+            Button(onClick = { if (contactNameInput.isNotBlank() && contactPhoneInput.isNotBlank()) onAdd(contactNameInput, contactPhoneInput, contactRelationshipInput) }, colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)) {
                 Text("Save")
             }
         },
@@ -1458,6 +1493,9 @@ fun AddContactSubDialog(
     )
 }
 
+/**
+ * Shared styling configuration for input text fields across the Settings screen.
+ */
 @Composable
 fun defaultTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = TextPearl,

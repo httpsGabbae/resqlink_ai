@@ -10,18 +10,34 @@ import java.util.Locale
 import java.util.UUID
 
 /**
- * Coordinates emergency event states, prevents duplicate simultaneous dispatch loops,
- * and maintains safety policy guarantees (e.g. no automatic 911 calls on timeouts).
+ * # EmergencyEventManager
+ *
+ * The central coordination brain of the ResQLink AI emergency engine.
+ *
+ * Ordinary Human Overview:
+ * When danger occurs, multiple sensors might fire at the same time:
+ * for example, a car crash triggers the accelerometer AND the driver shouts "Tulong!".
+ * If not managed properly, an app might try to send 10 text messages at once and crash.
+ *
+ * [EmergencyEventManager] solves this by acting as the **single source of truth**:
+ * 1. **Deduplication**: If an incident is already ongoing, any new trigger is logged as a
+ *    "corroborating signal" (evidence) instead of creating duplicate panic loops.
+ * 2. **State Transition Machine**: Moves the incident cleanly from Suspected -> Confirmation ->
+ *    Alerting -> Active -> Resolved.
+ * 3. **Audit Trail**: Archives every incident into an in-memory chronological history list.
  */
 class EmergencyEventManager private constructor() {
 
     companion object {
         @Volatile
-        private var instance: EmergencyEventManager? = null
+        private var singletonInstance: EmergencyEventManager? = null
 
+        /**
+         * Returns the global singleton instance using double-checked locking for thread safety.
+         */
         fun getInstance(): EmergencyEventManager {
-            return instance ?: synchronized(this) {
-                instance ?: EmergencyEventManager().also { instance = it }
+            return singletonInstance ?: synchronized(this) {
+                singletonInstance ?: EmergencyEventManager().also { singletonInstance = it }
             }
         }
     }
@@ -34,8 +50,14 @@ class EmergencyEventManager private constructor() {
 
     /**
      * Registers a new emergency trigger or corroborates an existing active incident.
-     * Returns a Pair of the incident and a Boolean indicating whether this was a brand-new incident (true)
-     * or an existing incident that was corroborated without duplicate dispatch (false).
+     *
+     * @param source What caused this trigger (Voice Keyword, SOS Button, Fall Motion, etc.).
+     * @param detectedPhrase The words detected, if any.
+     * @param location The GPS coordinates captured at the moment of trigger.
+     * @param isSimulated True if running an educational test simulation.
+     * @return A Pair containing:
+     *   1. The [EmergencyIncident] record.
+     *   2. A Boolean: true if this is a brand-new emergency; false if it was merged into an ongoing incident.
      */
     @Synchronized
     fun registerTrigger(
@@ -44,28 +66,30 @@ class EmergencyEventManager private constructor() {
         location: LocationSnapshot? = null,
         isSimulated: Boolean = false
     ): Pair<EmergencyIncident, Boolean> {
-        val active = _currentIncident.value
-        val isOngoing = active != null && (
-                active.state == IncidentLifecycleState.SUSPECTED ||
-                active.state == IncidentLifecycleState.AWAITING_CONFIRMATION ||
-                active.state == IncidentLifecycleState.CONFIRMED ||
-                active.state == IncidentLifecycleState.CONTACT_ALERTING ||
-                active.state == IncidentLifecycleState.ACTIVE_ASSIST
+        val activeIncident = _currentIncident.value
+        val isIncidentOngoing = activeIncident != null && (
+                activeIncident.state == IncidentLifecycleState.SUSPECTED ||
+                activeIncident.state == IncidentLifecycleState.AWAITING_CONFIRMATION ||
+                activeIncident.state == IncidentLifecycleState.CONFIRMED ||
+                activeIncident.state == IncidentLifecycleState.CONTACT_ALERTING ||
+                activeIncident.state == IncidentLifecycleState.ACTIVE_ASSIST
         )
 
-        if (isOngoing && active != null) {
-            // Deduplicate: Don't spin up another dispatch cycle. Log as corroborating signal!
-            val signal = "[${SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())}] Corroborating trigger from ${source.displayName}" +
+        // Deduplication Guard: If an emergency is already active, corroborate without duplicate dispatch
+        if (isIncidentOngoing && activeIncident != null) {
+            val timestampString = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            val corroboratingSignal = "[$timestampString] Corroborating trigger from ${source.displayName}" +
                     (if (!detectedPhrase.isNullOrBlank()) ": \"$detectedPhrase\"" else "")
-            val updated = active.copy(
-                corroboratingSignals = active.corroboratingSignals + signal,
-                location = location ?: active.location
+
+            val updatedIncident = activeIncident.copy(
+                corroboratingSignals = activeIncident.corroboratingSignals + corroboratingSignal,
+                location = location ?: activeIncident.location
             )
-            _currentIncident.value = updated
-            return Pair(updated, false)
+            _currentIncident.value = updatedIncident
+            return Pair(updatedIncident, false)
         }
 
-        // New Incident Creation
+        // New Incident Creation: Generate unique ID and initial lifecycle state
         val newIncidentId = generateIncidentId(isSimulated)
         val initialIncident = EmergencyIncident(
             incidentId = newIncidentId,
@@ -88,101 +112,128 @@ class EmergencyEventManager private constructor() {
         return Pair(initialIncident, true)
     }
 
+    /**
+     * Transitions an active incident to a new lifecycle state.
+     */
     @Synchronized
     fun transitionState(
         incidentId: String,
         newState: IncidentLifecycleState,
         notes: String? = null
     ): EmergencyIncident? {
-        val current = _currentIncident.value
-        if (current == null || current.incidentId != incidentId) return null
+        val currentIncidentState = _currentIncident.value
+        if (currentIncidentState == null || currentIncidentState.incidentId != incidentId) return null
 
-        val updated = current.copy(
+        val updatedIncident = currentIncidentState.copy(
             state = newState,
-            notes = if (notes != null) "${current.notes ?: ""}\n$notes".trim() else current.notes,
+            notes = if (notes != null) "${currentIncidentState.notes ?: ""}\n$notes".trim() else currentIncidentState.notes,
             resolvedTimeMillis = if (newState == IncidentLifecycleState.RESOLVED || newState == IncidentLifecycleState.CANCELLED) {
                 System.currentTimeMillis()
-            } else current.resolvedTimeMillis
+            } else currentIncidentState.resolvedTimeMillis
         )
 
-        _currentIncident.value = updated
+        _currentIncident.value = updatedIncident
 
         if (newState == IncidentLifecycleState.RESOLVED || newState == IncidentLifecycleState.CANCELLED) {
-            archiveIncident(updated)
+            archiveIncident(updatedIncident)
         }
 
-        return updated
+        return updatedIncident
     }
 
+    /**
+     * Records the outcome of sending emergency SMS alerts to trusted contacts.
+     */
     @Synchronized
     fun recordContactAlertResult(
         incidentId: String,
         attempted: Int,
         sent: Int
     ) {
-        val current = _currentIncident.value
-        if (current == null || current.incidentId != incidentId) return
-        _currentIncident.value = current.copy(
+        val currentIncidentState = _currentIncident.value
+        if (currentIncidentState == null || currentIncidentState.incidentId != incidentId) return
+
+        _currentIncident.value = currentIncidentState.copy(
             contactAlertsAttempted = attempted,
             contactAlertsSent = sent,
             state = IncidentLifecycleState.CONTACT_ALERTING
         )
     }
 
+    /**
+     * Records that an outgoing cellular emergency phone call was placed.
+     */
     @Synchronized
     fun recordCallInitiated(
         incidentId: String,
         isPublicEmergency: Boolean,
         callTargetName: String
     ) {
-        val current = _currentIncident.value
-        if (current == null || current.incidentId != incidentId) return
-        val signal = "Call placed to: $callTargetName (Public 911: $isPublicEmergency)"
-        _currentIncident.value = current.copy(
+        val currentIncidentState = _currentIncident.value
+        if (currentIncidentState == null || currentIncidentState.incidentId != incidentId) return
+
+        val callSignalLog = "Call placed to: $callTargetName (Public 911: $isPublicEmergency)"
+        _currentIncident.value = currentIncidentState.copy(
             publicEmergencyCallInitiated = isPublicEmergency,
-            corroboratingSignals = current.corroboratingSignals + signal,
+            corroboratingSignals = currentIncidentState.corroboratingSignals + callSignalLog,
             state = IncidentLifecycleState.ACTIVE_ASSIST
         )
     }
 
+    /**
+     * Aborts an active incident (e.g. user canceled during the 10-second countdown).
+     */
     @Synchronized
     fun cancelIncident(incidentId: String, reason: String = "User Aborted") {
         transitionState(incidentId, IncidentLifecycleState.CANCELLED, "Cancelled: $reason")
     }
 
+    /**
+     * Marks an incident safely resolved once assistance has concluded.
+     */
     @Synchronized
     fun resolveIncident(incidentId: String, reason: String = "Resolved") {
         transitionState(incidentId, IncidentLifecycleState.RESOLVED, "Resolution: $reason")
     }
 
+    /**
+     * Clears the active incident slot and archives it to historical memory.
+     */
     @Synchronized
     fun clearActiveIncident() {
-        val current = _currentIncident.value
-        if (current != null) {
-            archiveIncident(current.copy(resolvedTimeMillis = System.currentTimeMillis()))
+        val currentIncidentState = _currentIncident.value
+        if (currentIncidentState != null) {
+            archiveIncident(currentIncidentState.copy(resolvedTimeMillis = System.currentTimeMillis()))
         }
         _currentIncident.value = null
     }
 
+    /**
+     * Stores the incident in local memory history (keeps the most recent 50 incidents).
+     */
     private fun archiveIncident(incident: EmergencyIncident) {
-        val list = _incidentHistory.value.toMutableList()
-        val existingIndex = list.indexOfFirst { it.incidentId == incident.incidentId }
+        val historyList = _incidentHistory.value.toMutableList()
+        val existingIndex = historyList.indexOfFirst { it.incidentId == incident.incidentId }
         if (existingIndex >= 0) {
-            list[existingIndex] = incident
+            historyList[existingIndex] = incident
         } else {
-            list.add(0, incident)
+            historyList.add(0, incident)
         }
-        // Limit local memory retention to last 50 incidents
-        if (list.size > 50) {
-            list.removeAt(list.size - 1)
+
+        // Limit memory retention to the last 50 incidents to prevent memory leaks
+        if (historyList.size > 50) {
+            historyList.removeAt(historyList.size - 1)
         }
-        _incidentHistory.value = list
+        _incidentHistory.value = historyList
     }
 
+    /**
+     * Generates a human-readable incident tracking ID (e.g. "INC-20261111-A1B2C3").
+     */
     private fun generateIncidentId(isSimulated: Boolean): String {
-        val dateStr = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-        val shortUuid = UUID.randomUUID().toString().substring(0, 6).uppercase(Locale.US)
+        val formattedDateString = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+        val randomUniqueCode = UUID.randomUUID().toString().substring(0, 6).uppercase(Locale.US)
         val prefix = if (isSimulated) "SIM" else "INC"
-        return "$prefix-$dateStr-$shortUuid"
+        return "$prefix-$formattedDateString-$randomUniqueCode"
     }
 }

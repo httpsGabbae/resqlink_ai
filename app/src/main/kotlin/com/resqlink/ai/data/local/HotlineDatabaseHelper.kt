@@ -14,6 +14,21 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.*
 
+/**
+ * # HotlineDatabaseHelper
+ *
+ * The offline SQLite database engine powering ResQLink AI.
+ *
+ * Ordinary Human Overview:
+ * When an earthquake strikes or mobile data towers go down, online map searches fail.
+ * This helper pre-loads and maintains an on-device SQLite database containing:
+ * 1. Over 50+ official Philippine emergency hotlines (PNP, BFP, Red Cross, DPWH, DRRMO).
+ * 2. In-Case-of-Emergency (ICE) trusted family contacts.
+ * 3. Chronological incident audit logs recording every alert trigger, GPS location, and outcome.
+ *
+ * It uses the mathematical **Haversine formula** to calculate physical distances directly
+ * on the phone CPU without needing any internet connection or cloud API.
+ */
 class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
     context,
     DATABASE_NAME,
@@ -25,6 +40,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         private const val DATABASE_NAME = "resqlink.db"
         private const val DATABASE_VERSION = 7
 
+        // Hotlines table & columns
         const val TABLE_HOTLINES = "hotlines"
         const val COL_ID = "id"
         const val COL_NAME = "name"
@@ -41,6 +57,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         const val COL_LAST_VERIFIED = "last_verified"
         const val COL_SOURCE = "source"
 
+        // Trusted Contacts table & columns
         const val TABLE_TRUSTED_CONTACTS = "trusted_contacts"
         const val COL_CONTACT_ID = "id"
         const val COL_CONTACT_NAME = "name"
@@ -48,6 +65,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         const val COL_CONTACT_RELATIONSHIP = "relationship"
         const val COL_CONTACT_IS_AUTHORIZED = "is_authorized"
 
+        // Incident Logs table & columns
         const val TABLE_INCIDENT_LOGS = "incident_logs"
         const val COL_LOG_INCIDENT_ID = "incident_id"
         const val COL_LOG_TRIGGER_SOURCE = "trigger_source"
@@ -66,8 +84,9 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         const val COL_LOG_NOTES = "notes"
     }
 
-    override fun onCreate(db: SQLiteDatabase) {
-        db.execSQL(
+    override fun onCreate(database: SQLiteDatabase) {
+        // Create hotlines directory table
+        database.execSQL(
             """
             CREATE TABLE $TABLE_HOTLINES (
                 $COL_ID TEXT PRIMARY KEY,
@@ -88,7 +107,8 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             """.trimIndent()
         )
 
-        db.execSQL(
+        // Create trusted emergency contacts table
+        database.execSQL(
             """
             CREATE TABLE $TABLE_TRUSTED_CONTACTS (
                 $COL_CONTACT_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,14 +120,13 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             """.trimIndent()
         )
 
-        createIncidentLogsTable(db)
-
-        seedInitialHotlines(db)
-        seedSampleContact(db)
+        createIncidentLogsTable(database)
+        seedInitialHotlines(database)
+        seedSampleContact(database)
     }
 
-    private fun createIncidentLogsTable(db: SQLiteDatabase) {
-        db.execSQL(
+    private fun createIncidentLogsTable(database: SQLiteDatabase) {
+        database.execSQL(
             """
             CREATE TABLE IF NOT EXISTS $TABLE_INCIDENT_LOGS (
                 $COL_LOG_INCIDENT_ID TEXT PRIMARY KEY,
@@ -130,28 +149,31 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+    override fun onUpgrade(database: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 4) {
             try {
-                db.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_IS_PINNED INTEGER DEFAULT 0")
-            } catch (e: Exception) {}
+                database.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_IS_PINNED INTEGER DEFAULT 0")
+            } catch (ignored: Exception) {}
             try {
-                db.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_LAST_VERIFIED INTEGER DEFAULT 0")
-            } catch (e: Exception) {}
+                database.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_LAST_VERIFIED INTEGER DEFAULT 0")
+            } catch (ignored: Exception) {}
             try {
-                db.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_SOURCE TEXT DEFAULT 'SYSTEM'")
-            } catch (e: Exception) {}
+                database.execSQL("ALTER TABLE $TABLE_HOTLINES ADD COLUMN $COL_SOURCE TEXT DEFAULT 'SYSTEM'")
+            } catch (ignored: Exception) {}
         }
         if (oldVersion < 6) {
-            seedInitialHotlines(db)
+            seedInitialHotlines(database)
         }
         if (oldVersion < 7) {
-            createIncidentLogsTable(db)
+            createIncidentLogsTable(database)
         }
     }
 
-    private fun seedInitialHotlines(db: SQLiteDatabase) {
-        val initialHotlines = listOf(
+    /**
+     * Pre-seeds the database with official nationwide and regional Philippine emergency hotlines.
+     */
+    private fun seedInitialHotlines(database: SQLiteDatabase) {
+        val initialHotlinesList = listOf(
             // Universal National Hotlines (Official Kaya Natin / PH Emergency Callout)
             Hotline("911-NAT", "National Emergency Hotline", HotlineCategory.UNIVERSAL_911, "911", null, "National", "Philippines", "NCR", 14.5995, 120.9842),
             Hotline("PNP-117", "Philippine National Police (PNP)", HotlineCategory.POLICE_PNP, "117", "0917-847-5757", "National", "Philippines", "NCR", 14.6150, 121.0543),
@@ -159,7 +181,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             Hotline("DPWH-16502", "Department of Public Works and Highways (DPWH)", HotlineCategory.DISASTER_DRRMO, "165-02", "02-8530-0000", "National", "Philippines", "NCR", 14.5885, 120.9752),
             Hotline("BFP-NAT", "Bureau of Fire Protection National HQ", HotlineCategory.FIRE_BFP, "02-8426-0219", null, "Quezon City", "Metro Manila", "NCR", 14.6468, 121.0494),
 
-            // Quezon City Multi-Category
+            // Quezon City
             Hotline("QC-DRRMO", "Quezon City DRRMO Disaster Operations", HotlineCategory.DISASTER_DRRMO, "122", "02-8927-5914", "Quezon City", "Metro Manila", "NCR", 14.6507, 121.0509),
             Hotline("QC-PNP", "Quezon City Police District (QCPD)", HotlineCategory.POLICE_PNP, "02-8925-8417", "0917-840-3925", "Quezon City", "Metro Manila", "NCR", 14.6534, 121.0540),
             Hotline("QC-PNP-PS9", "PNP Anonas Police Station (PS 9)", HotlineCategory.POLICE_PNP, "02-8921-2550", "0917-899-8727", "Quezon City", "Metro Manila", "NCR", 14.6295, 121.0664),
@@ -171,28 +193,28 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             Hotline("QC-BRGY-CEN", "Barangay Central Disaster Action", HotlineCategory.BARANGAY, "02-8920-5471", null, "Quezon City", "Metro Manila", "NCR", 14.6475, 121.0505),
             Hotline("QC-BRGY-BAT", "Barangay Batasan Hills Emergency Ops", HotlineCategory.BARANGAY, "02-8951-2489", null, "Quezon City", "Metro Manila", "NCR", 14.6854, 121.0942),
 
-            // Manila Multi-Category
+            // Manila
             Hotline("MNL-DRRMO", "Manila Disaster Risk Reduction (MDRRMO)", HotlineCategory.DISASTER_DRRMO, "02-8527-5174", "0917-857-4263", "Manila", "Metro Manila", "NCR", 14.5995, 120.9842),
             Hotline("MNL-PNP", "Manila Police District (MPD)", HotlineCategory.POLICE_PNP, "02-8523-3378", null, "Manila", "Metro Manila", "NCR", 14.5880, 120.9855),
             Hotline("MNL-PGH", "Philippine General Hospital (PGH) Trauma ER", HotlineCategory.MEDICAL_HOSPITAL, "02-8554-8400", null, "Manila", "Metro Manila", "NCR", 14.5772, 120.9880),
             Hotline("MNL-BFP", "Manila Fire Department Central Ops", HotlineCategory.FIRE_BFP, "02-8527-3932", null, "Manila", "Metro Manila", "NCR", 14.5901, 120.9840),
             Hotline("MNL-BRGY-ERM", "Barangay 659 Ermita Disaster Center", HotlineCategory.BARANGAY, "02-8527-1111", null, "Manila", "Metro Manila", "NCR", 14.5910, 120.9810),
 
-            // Makati Multi-Category
+            // Makati
             Hotline("MKT-C3", "Makati Command, Control & Comm Center", HotlineCategory.DISASTER_DRRMO, "168", "02-8870-1920", "Makati", "Metro Manila", "NCR", 14.5547, 121.0244),
             Hotline("MKT-MMC", "Makati Medical Center 24/7 ER", HotlineCategory.MEDICAL_HOSPITAL, "02-8888-8999", null, "Makati", "Metro Manila", "NCR", 14.5590, 121.0145),
             Hotline("MKT-PNP", "Makati Police District Headquarters", HotlineCategory.POLICE_PNP, "02-8887-1798", null, "Makati", "Metro Manila", "NCR", 14.5610, 121.0210),
             Hotline("MKT-BFP", "Makati Central Fire Station", HotlineCategory.FIRE_BFP, "02-8818-0158", null, "Makati", "Metro Manila", "NCR", 14.5600, 121.0180),
             Hotline("MKT-BRGY-SL", "Barangay San Lorenzo Emergency Center", HotlineCategory.BARANGAY, "02-8817-4886", null, "Makati", "Metro Manila", "NCR", 14.5510, 121.0230),
 
-            // Pasig Multi-Category
+            // Pasig
             Hotline("PSG-RESCUE", "Pasig City Disaster Risk & Rescue Team", HotlineCategory.DISASTER_DRRMO, "02-8643-0000", "0908-899-7332", "Pasig", "Metro Manila", "NCR", 14.5764, 121.0851),
             Hotline("PSG-PCGH", "Pasig City General Hospital ER", HotlineCategory.MEDICAL_HOSPITAL, "02-8643-3333", null, "Pasig", "Metro Manila", "NCR", 14.5630, 121.0920),
             Hotline("PSG-PNP", "Pasig City Police Station", HotlineCategory.POLICE_PNP, "02-8641-0433", null, "Pasig", "Metro Manila", "NCR", 14.5750, 121.0820),
             Hotline("PSG-BFP", "Pasig City Central Fire Station", HotlineCategory.FIRE_BFP, "02-8641-2815", null, "Pasig", "Metro Manila", "NCR", 14.5770, 121.0830),
             Hotline("PSG-BRGY-SA", "Barangay San Antonio Rescue Center", HotlineCategory.BARANGAY, "02-8631-5080", null, "Pasig", "Metro Manila", "NCR", 14.5820, 121.0650),
 
-            // Taguig / BGC Multi-Category
+            // Taguig / BGC
             Hotline("TGG-C3", "Taguig City Command Center Rescue", HotlineCategory.DISASTER_DRRMO, "02-8789-3200", "0917-550-3727", "Taguig", "Metro Manila", "NCR", 14.5204, 121.0539),
             Hotline("TGG-TPDH", "Taguig-Pateros District Hospital ER", HotlineCategory.MEDICAL_HOSPITAL, "02-8837-8344", null, "Taguig", "Metro Manila", "NCR", 14.5120, 121.0680),
             Hotline("TGG-PNP", "Taguig City Police Station", HotlineCategory.POLICE_PNP, "02-8642-3582", null, "Taguig", "Metro Manila", "NCR", 14.5240, 121.0540),
@@ -236,117 +258,168 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             Hotline("CDO-911", "Cagayan de Oro Oro Rescue 911", HotlineCategory.DISASTER_DRRMO, "911", "088-858-4080", "Cagayan de Oro", "Misamis Oriental", "Region X", 8.4542, 124.6319)
         )
 
-        for (hotline in initialHotlines) {
-            val values = ContentValues().apply {
-                put(COL_ID, hotline.id)
-                put(COL_NAME, hotline.name)
-                put(COL_CATEGORY, hotline.category.name)
-                put(COL_PRIMARY_NUMBER, hotline.primaryNumber)
-                put(COL_ALT_NUMBER, hotline.alternateNumber)
-                put(COL_CITY, hotline.cityMunicipality)
-                put(COL_PROVINCE, hotline.province)
-                put(COL_REGION, hotline.region)
-                put(COL_LATITUDE, hotline.latitude)
-                put(COL_LONGITUDE, hotline.longitude)
+        for (hotlineItem in initialHotlinesList) {
+            val databaseValues = ContentValues().apply {
+                put(COL_ID, hotlineItem.id)
+                put(COL_NAME, hotlineItem.name)
+                put(COL_CATEGORY, hotlineItem.category.name)
+                put(COL_PRIMARY_NUMBER, hotlineItem.primaryNumber)
+                put(COL_ALT_NUMBER, hotlineItem.alternateNumber)
+                put(COL_CITY, hotlineItem.cityMunicipality)
+                put(COL_PROVINCE, hotlineItem.province)
+                put(COL_REGION, hotlineItem.region)
+                put(COL_LATITUDE, hotlineItem.latitude)
+                put(COL_LONGITUDE, hotlineItem.longitude)
                 put(COL_IS_CUSTOM, 0)
             }
-            db.insertWithOnConflict(TABLE_HOTLINES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+            database.insertWithOnConflict(TABLE_HOTLINES, null, databaseValues, SQLiteDatabase.CONFLICT_REPLACE)
         }
     }
 
-    private fun seedSampleContact(db: SQLiteDatabase) {
-        val values = ContentValues().apply {
+    private fun seedSampleContact(database: SQLiteDatabase) {
+        val sampleContactValues = ContentValues().apply {
             put(COL_CONTACT_NAME, "Sample Guardian Contact")
             put(COL_CONTACT_PHONE, "09171234567")
             put(COL_CONTACT_RELATIONSHIP, "Family")
             put(COL_CONTACT_IS_AUTHORIZED, 1)
         }
-        db.insert(TABLE_TRUSTED_CONTACTS, null, values)
+        database.insert(TABLE_TRUSTED_CONTACTS, null, sampleContactValues)
     }
 
+    /**
+     * Reads all emergency hotlines stored in the offline database.
+     */
     fun getAllHotlines(): List<Hotline> {
-        val list = mutableListOf<Hotline>()
-        val db = readableDatabase
-        val cursor: Cursor = db.rawQuery("SELECT * FROM $TABLE_HOTLINES", null)
-        cursor.use {
-            while (it.moveToNext()) {
-                list.add(cursorToHotline(it))
+        val hotlinesList = mutableListOf<Hotline>()
+        val readableDb = readableDatabase
+        val queryCursor: Cursor = readableDb.rawQuery("SELECT * FROM $TABLE_HOTLINES", null)
+        queryCursor.use { cursor ->
+            while (cursor.moveToNext()) {
+                hotlinesList.add(cursorToHotline(cursor))
             }
         }
-        return list
+        return hotlinesList
     }
 
-    fun findNearestHotlinesWithinRadius(userLat: Double, userLng: Double, maxRadiusKm: Double = 5.0): List<Hotline> {
-        // 1. Try primary radius (default 5.0 km with 1.5 km margin for nearby stations)
-        val initialCandidates = queryStationsWithinRadius(userLat, userLng, maxRadiusKm + 1.5)
-        if (initialCandidates.isNotEmpty()) {
-            return initialCandidates
+    /**
+     * Finds the nearest emergency hotlines within a radius of the user's GPS coordinates.
+     *
+     * Fallback Strategy:
+     * 1. Query within primary radius (default: 5.0 km + 1.5 km margin).
+     * 2. If no station found, expands radius to 25.0 km (for rural/provincial areas).
+     * 3. If still empty, finds the closest local station by distance.
+     * 4. Ultimate failsafe: Returns the National 911 fallback hotline.
+     */
+    fun findNearestHotlinesWithinRadius(
+        userLatitude: Double,
+        userLongitude: Double,
+        maxRadiusKilometers: Double = 5.0
+    ): List<Hotline> {
+        // Step 1: Search within primary radius
+        val primaryCandidates = queryStationsWithinRadius(userLatitude, userLongitude, maxRadiusKilometers + 1.5)
+        if (primaryCandidates.isNotEmpty()) {
+            return primaryCandidates
         }
 
-        // 2. Expand search radius to 25.0 km for suburban & provincial coverage
-        val expanded25 = queryStationsWithinRadius(userLat, userLng, 25.0)
-        if (expanded25.isNotEmpty()) {
-            return expanded25
+        // Step 2: Expand search radius to 25.0 km for suburban and provincial coverage
+        val expandedProvincialCandidates = queryStationsWithinRadius(userLatitude, userLongitude, 25.0)
+        if (expandedProvincialCandidates.isNotEmpty()) {
+            return expandedProvincialCandidates
         }
 
-        // 3. Fallback: Find closest local DRRMO/PNP station in database by distance
-        val allHotlines = getAllHotlines()
-        val nonUniversal = allHotlines.filter { it.category != HotlineCategory.UNIVERSAL_911 && it.primaryNumber != "911" }
-        if (nonUniversal.isNotEmpty()) {
-            val closest = nonUniversal.map {
-                val dist = calculateHaversineDistanceKm(userLat, userLng, it.latitude, it.longitude)
-                it.copy(distanceKm = (round(dist * 100.0) / 100.0))
+        // Step 3: Fallback - Find the closest non-911 municipal station by distance
+        val allStoredHotlines = getAllHotlines()
+        val nonUniversalHotlines = allStoredHotlines.filter {
+            it.category != HotlineCategory.UNIVERSAL_911 && it.primaryNumber != "911"
+        }
+        if (nonUniversalHotlines.isNotEmpty()) {
+            val closestStations = nonUniversalHotlines.map { hotline ->
+                val distanceKm = calculateHaversineDistanceKm(
+                    userLatitude,
+                    userLongitude,
+                    hotline.latitude,
+                    hotline.longitude
+                )
+                hotline.copy(distanceKm = (round(distanceKm * 100.0) / 100.0))
             }.sortedBy { it.distanceKm ?: Double.MAX_VALUE }
-            return closest.take(3)
+
+            return closestStations.take(3)
         }
 
+        // Step 4: Fallback to Universal 911
         return listOf(getUniversalFallback911())
     }
 
-    private fun queryStationsWithinRadius(userLat: Double, userLng: Double, radiusKm: Double): List<Hotline> {
-        val latDelta = radiusKm / 111.0
-        val lngDelta = radiusKm / (111.0 * cos(Math.toRadians(userLat)))
+    /**
+     * Performs a fast bounding-box SQL query followed by exact Haversine distance verification.
+     */
+    private fun queryStationsWithinRadius(
+        userLatitude: Double,
+        userLongitude: Double,
+        radiusKilometers: Double
+    ): List<Hotline> {
+        // 1 degree of latitude is approximately 111.0 kilometers
+        val latitudeDelta = radiusKilometers / 111.0
+        val longitudeDelta = radiusKilometers / (111.0 * cos(Math.toRadians(userLatitude)))
 
-        val minLat = userLat - latDelta
-        val maxLat = userLat + latDelta
-        val minLng = userLng - abs(lngDelta)
-        val maxLng = userLng + abs(lngDelta)
+        val minimumLatitude = userLatitude - latitudeDelta
+        val maximumLatitude = userLatitude + latitudeDelta
+        val minimumLongitude = userLongitude - abs(longitudeDelta)
+        val maximumLongitude = userLongitude + abs(longitudeDelta)
 
-        val db = readableDatabase
-        val query = """
+        val readableDb = readableDatabase
+        val boundingBoxQuery = """
             SELECT * FROM $TABLE_HOTLINES 
             WHERE $COL_LATITUDE BETWEEN ? AND ? 
             AND $COL_LONGITUDE BETWEEN ? AND ?
         """.trimIndent()
 
-        val candidates = mutableListOf<Hotline>()
-        val cursor = db.rawQuery(
-            query,
-            arrayOf(minLat.toString(), maxLat.toString(), minLng.toString(), maxLng.toString())
+        val candidateHotlines = mutableListOf<Hotline>()
+        val queryCursor = readableDb.rawQuery(
+            boundingBoxQuery,
+            arrayOf(
+                minimumLatitude.toString(),
+                maximumLatitude.toString(),
+                minimumLongitude.toString(),
+                maximumLongitude.toString()
+            )
         )
 
-        cursor.use {
-            while (it.moveToNext()) {
-                val hotline = cursorToHotline(it)
-                val distance = calculateHaversineDistanceKm(userLat, userLng, hotline.latitude, hotline.longitude)
-                if (distance <= radiusKm) {
-                    candidates.add(hotline.copy(distanceKm = (round(distance * 100.0) / 100.0)))
+        queryCursor.use { cursor ->
+            while (cursor.moveToNext()) {
+                val hotlineItem = cursorToHotline(cursor)
+                val exactDistanceKilometers = calculateHaversineDistanceKm(
+                    userLatitude,
+                    userLongitude,
+                    hotlineItem.latitude,
+                    hotlineItem.longitude
+                )
+                if (exactDistanceKilometers <= radiusKilometers) {
+                    val roundedDistance = (round(exactDistanceKilometers * 100.0) / 100.0)
+                    candidateHotlines.add(hotlineItem.copy(distanceKm = roundedDistance))
                 }
             }
         }
 
-        return candidates.sortedWith(
+        // Sort: Pinned stations first, then closest distance
+        return candidateHotlines.sortedWith(
             compareByDescending<Hotline> { it.isPinned }
                 .thenBy { it.distanceKm ?: Double.MAX_VALUE }
         )
     }
 
+    /**
+     * Returns the universal 911 fallback hotline.
+     */
     fun getUniversalFallback911(): Hotline {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_HOTLINES WHERE $COL_CATEGORY = ?", arrayOf(HotlineCategory.UNIVERSAL_911.name))
-        cursor.use {
-            if (it.moveToFirst()) {
-                return cursorToHotline(it)
+        val readableDb = readableDatabase
+        val queryCursor = readableDb.rawQuery(
+            "SELECT * FROM $TABLE_HOTLINES WHERE $COL_CATEGORY = ?",
+            arrayOf(HotlineCategory.UNIVERSAL_911.name)
+        )
+        queryCursor.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursorToHotline(cursor)
             }
         }
         return Hotline(
@@ -362,128 +435,155 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
         )
     }
 
+    /**
+     * Retrieves all saved In-Case-of-Emergency (ICE) trusted contacts.
+     */
     fun getTrustedContacts(): List<TrustedContact> {
-        val contacts = mutableListOf<TrustedContact>()
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_TRUSTED_CONTACTS", null)
-        cursor.use {
-            while (it.moveToNext()) {
-                contacts.add(
+        val contactList = mutableListOf<TrustedContact>()
+        val readableDb = readableDatabase
+        val queryCursor = readableDb.rawQuery("SELECT * FROM $TABLE_TRUSTED_CONTACTS", null)
+        queryCursor.use { cursor ->
+            while (cursor.moveToNext()) {
+                contactList.add(
                     TrustedContact(
-                        id = it.getLong(it.getColumnIndexOrThrow(COL_CONTACT_ID)),
-                        name = it.getString(it.getColumnIndexOrThrow(COL_CONTACT_NAME)),
-                        phoneNumber = it.getString(it.getColumnIndexOrThrow(COL_CONTACT_PHONE)),
-                        relationship = it.getString(it.getColumnIndexOrThrow(COL_CONTACT_RELATIONSHIP)),
-                        isAuthorizedForSafetyCheck = it.getInt(it.getColumnIndexOrThrow(COL_CONTACT_IS_AUTHORIZED)) == 1
+                        id = cursor.getLong(cursor.getColumnIndexOrThrow(COL_CONTACT_ID)),
+                        name = cursor.getString(cursor.getColumnIndexOrThrow(COL_CONTACT_NAME)),
+                        phoneNumber = cursor.getString(cursor.getColumnIndexOrThrow(COL_CONTACT_PHONE)),
+                        relationship = cursor.getString(cursor.getColumnIndexOrThrow(COL_CONTACT_RELATIONSHIP)),
+                        isAuthorizedForSafetyCheck = cursor.getInt(cursor.getColumnIndexOrThrow(COL_CONTACT_IS_AUTHORIZED)) == 1
                     )
                 )
             }
         }
-        return contacts
+        return contactList
     }
 
+    /**
+     * Adds a new trusted contact to the local database.
+     */
     fun addTrustedContact(contact: TrustedContact): Long {
-        val db = writableDatabase
-        val values = ContentValues().apply {
+        val writableDb = writableDatabase
+        val contactValues = ContentValues().apply {
             put(COL_CONTACT_NAME, contact.name)
             put(COL_CONTACT_PHONE, contact.phoneNumber)
             put(COL_CONTACT_RELATIONSHIP, contact.relationship)
             put(COL_CONTACT_IS_AUTHORIZED, if (contact.isAuthorizedForSafetyCheck) 1 else 0)
         }
-        return db.insert(TABLE_TRUSTED_CONTACTS, null, values)
+        return writableDb.insert(TABLE_TRUSTED_CONTACTS, null, contactValues)
     }
 
-    fun deleteTrustedContact(id: Long): Int {
-        val db = writableDatabase
-        return db.delete(TABLE_TRUSTED_CONTACTS, "$COL_CONTACT_ID = ?", arrayOf(id.toString()))
+    /**
+     * Deletes a trusted contact by its unique database row ID.
+     */
+    fun deleteTrustedContact(contactId: Long): Int {
+        val writableDb = writableDatabase
+        return writableDb.delete(TABLE_TRUSTED_CONTACTS, "$COL_CONTACT_ID = ?", arrayOf(contactId.toString()))
     }
 
-    fun upsertHotlines(hotlines: List<Hotline>) {
-        val db = writableDatabase
-        db.beginTransaction()
+    /**
+     * Inserts or updates multiple hotlines in a single atomic database transaction.
+     */
+    fun upsertHotlines(hotlinesList: List<Hotline>) {
+        val writableDb = writableDatabase
+        writableDb.beginTransaction()
         try {
-            for (hotline in hotlines) {
-                // Check if already pinned
-                var alreadyPinned = false
-                val checkCursor = db.rawQuery("SELECT $COL_IS_PINNED FROM $TABLE_HOTLINES WHERE $COL_ID = ?", arrayOf(hotline.id))
-                checkCursor.use { c ->
-                    if (c.moveToFirst()) {
-                        val pinIdx = c.getColumnIndex(COL_IS_PINNED)
-                        if (pinIdx != -1) {
-                            alreadyPinned = c.getInt(pinIdx) == 1
+            for (hotlineItem in hotlinesList) {
+                // Check if the hotline is already pinned by the user so we don't accidentally unpin it
+                var isAlreadyPinned = false
+                val checkCursor = writableDb.rawQuery(
+                    "SELECT $COL_IS_PINNED FROM $TABLE_HOTLINES WHERE $COL_ID = ?",
+                    arrayOf(hotlineItem.id)
+                )
+                checkCursor.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val pinColumnIndex = cursor.getColumnIndex(COL_IS_PINNED)
+                        if (pinColumnIndex != -1) {
+                            isAlreadyPinned = cursor.getInt(pinColumnIndex) == 1
                         }
                     }
                 }
 
-                val values = ContentValues().apply {
-                    put(COL_ID, hotline.id)
-                    put(COL_NAME, hotline.name)
-                    put(COL_CATEGORY, hotline.category.name)
-                    put(COL_PRIMARY_NUMBER, hotline.primaryNumber)
-                    put(COL_ALT_NUMBER, hotline.alternateNumber)
-                    put(COL_CITY, hotline.cityMunicipality)
-                    put(COL_PROVINCE, hotline.province)
-                    put(COL_REGION, hotline.region)
-                    put(COL_LATITUDE, hotline.latitude)
-                    put(COL_LONGITUDE, hotline.longitude)
-                    put(COL_IS_CUSTOM, if (hotline.isCustom) 1 else 0)
-                    put(COL_IS_PINNED, if (hotline.isPinned || alreadyPinned) 1 else 0)
-                    put(COL_LAST_VERIFIED, hotline.lastVerifiedTimestamp)
-                    put(COL_SOURCE, hotline.source)
+                val hotlineValues = ContentValues().apply {
+                    put(COL_ID, hotlineItem.id)
+                    put(COL_NAME, hotlineItem.name)
+                    put(COL_CATEGORY, hotlineItem.category.name)
+                    put(COL_PRIMARY_NUMBER, hotlineItem.primaryNumber)
+                    put(COL_ALT_NUMBER, hotlineItem.alternateNumber)
+                    put(COL_CITY, hotlineItem.cityMunicipality)
+                    put(COL_PROVINCE, hotlineItem.province)
+                    put(COL_REGION, hotlineItem.region)
+                    put(COL_LATITUDE, hotlineItem.latitude)
+                    put(COL_LONGITUDE, hotlineItem.longitude)
+                    put(COL_IS_CUSTOM, if (hotlineItem.isCustom) 1 else 0)
+                    put(COL_IS_PINNED, if (hotlineItem.isPinned || isAlreadyPinned) 1 else 0)
+                    put(COL_LAST_VERIFIED, hotlineItem.lastVerifiedTimestamp)
+                    put(COL_SOURCE, hotlineItem.source)
                 }
-                db.insertWithOnConflict(TABLE_HOTLINES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+                writableDb.insertWithOnConflict(TABLE_HOTLINES, null, hotlineValues, SQLiteDatabase.CONFLICT_REPLACE)
             }
-            db.setTransactionSuccessful()
+            writableDb.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            writableDb.endTransaction()
         }
     }
 
-    fun setPinnedHotline(id: String, isPinned: Boolean) {
-        val db = writableDatabase
-        db.beginTransaction()
+    /**
+     * Pins a specific hotline so it remains at the top of lists. Clears any existing pin.
+     */
+    fun setPinnedHotline(hotlineId: String, isPinned: Boolean) {
+        val writableDb = writableDatabase
+        writableDb.beginTransaction()
         try {
             // Clear existing pins so only 1 station is pinned at a time
-            val clearValues = ContentValues().apply { put(COL_IS_PINNED, 0) }
-            db.update(TABLE_HOTLINES, clearValues, null, null)
+            val clearPinValues = ContentValues().apply { put(COL_IS_PINNED, 0) }
+            writableDb.update(TABLE_HOTLINES, clearPinValues, null, null)
 
             if (isPinned) {
-                val setValues = ContentValues().apply { put(COL_IS_PINNED, 1) }
-                db.update(TABLE_HOTLINES, setValues, "$COL_ID = ?", arrayOf(id))
+                val setPinValues = ContentValues().apply { put(COL_IS_PINNED, 1) }
+                writableDb.update(TABLE_HOTLINES, setPinValues, "$COL_ID = ?", arrayOf(hotlineId))
             }
-            db.setTransactionSuccessful()
+            writableDb.setTransactionSuccessful()
         } finally {
-            db.endTransaction()
+            writableDb.endTransaction()
         }
     }
 
+    /**
+     * Retrieves the currently pinned emergency hotline, if one is pinned.
+     */
     fun getPinnedHotline(): Hotline? {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT * FROM $TABLE_HOTLINES WHERE $COL_IS_PINNED = 1 LIMIT 1", null)
-        cursor.use {
-            if (it.moveToFirst()) {
-                return cursorToHotline(it)
+        val readableDb = readableDatabase
+        val queryCursor = readableDb.rawQuery(
+            "SELECT * FROM $TABLE_HOTLINES WHERE $COL_IS_PINNED = 1 LIMIT 1",
+            null
+        )
+        queryCursor.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursorToHotline(cursor)
             }
         }
         return null
     }
 
+    /**
+     * Converts an active SQLite database [Cursor] row into a [Hotline] domain object.
+     */
     private fun cursorToHotline(cursor: Cursor): Hotline {
-        val isPinnedIdx = cursor.getColumnIndex(COL_IS_PINNED)
-        val isPinned = if (isPinnedIdx != -1) cursor.getInt(isPinnedIdx) == 1 else false
+        val isPinnedIndex = cursor.getColumnIndex(COL_IS_PINNED)
+        val isPinned = if (isPinnedIndex != -1) cursor.getInt(isPinnedIndex) == 1 else false
 
-        val lastVerifiedIdx = cursor.getColumnIndex(COL_LAST_VERIFIED)
-        val lastVerified = if (lastVerifiedIdx != -1) cursor.getLong(lastVerifiedIdx) else 0L
+        val lastVerifiedIndex = cursor.getColumnIndex(COL_LAST_VERIFIED)
+        val lastVerifiedTimestamp = if (lastVerifiedIndex != -1) cursor.getLong(lastVerifiedIndex) else 0L
 
-        val sourceIdx = cursor.getColumnIndex(COL_SOURCE)
-        val source = if (sourceIdx != -1) cursor.getString(sourceIdx) ?: "SYSTEM" else "SYSTEM"
+        val sourceIndex = cursor.getColumnIndex(COL_SOURCE)
+        val source = if (sourceIndex != -1) cursor.getString(sourceIndex) ?: "SYSTEM" else "SYSTEM"
 
         return Hotline(
             id = cursor.getString(cursor.getColumnIndexOrThrow(COL_ID)),
             name = cursor.getString(cursor.getColumnIndexOrThrow(COL_NAME)),
             category = try {
                 HotlineCategory.valueOf(cursor.getString(cursor.getColumnIndexOrThrow(COL_CATEGORY)))
-            } catch (e: Exception) {
+            } catch (exception: Exception) {
                 HotlineCategory.UNIVERSAL_911
             },
             primaryNumber = cursor.getString(cursor.getColumnIndexOrThrow(COL_PRIMARY_NUMBER)),
@@ -494,68 +594,90 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             latitude = cursor.getDouble(cursor.getColumnIndexOrThrow(COL_LATITUDE)),
             longitude = cursor.getDouble(cursor.getColumnIndexOrThrow(COL_LONGITUDE)),
             isPinned = isPinned,
-            lastVerifiedTimestamp = lastVerified,
+            lastVerifiedTimestamp = lastVerifiedTimestamp,
             source = source
         )
     }
 
-    private fun calculateHaversineDistanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val earthRadiusKm = 6371.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2) * sin(dLat / 2) +
-                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-                sin(dLon / 2) * sin(dLon / 2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return earthRadiusKm * c
+    /**
+     * Calculates the great-circle distance between two geographic coordinates in kilometers
+     * using the mathematical Haversine formula.
+     *
+     * Formula:
+     * a = sin²(Δlat/2) + cos(lat1) * cos(lat2) * sin²(Δlon/2)
+     * c = 2 * atan2(√a, √(1-a))
+     * distance = Earth_Radius * c
+     */
+    private fun calculateHaversineDistanceKm(
+        latitude1: Double,
+        longitude1: Double,
+        latitude2: Double,
+        longitude2: Double
+    ): Double {
+        val earthRadiusKilometers = 6371.0
+        val deltaLatitudeRadians = Math.toRadians(latitude2 - latitude1)
+        val deltaLongitudeRadians = Math.toRadians(longitude2 - longitude1)
+
+        val haversineA = sin(deltaLatitudeRadians / 2) * sin(deltaLatitudeRadians / 2) +
+                cos(Math.toRadians(latitude1)) * cos(Math.toRadians(latitude2)) *
+                sin(deltaLongitudeRadians / 2) * sin(deltaLongitudeRadians / 2)
+
+        val angularDistanceC = 2 * atan2(sqrt(haversineA), sqrt(1 - haversineA))
+        return earthRadiusKilometers * angularDistanceC
     }
 
     // ==========================================
     // INCIDENT LOGS (OFFLINE CHRONOLOGICAL AUDIT)
     // ==========================================
 
-    fun insertIncidentLog(record: IncidentRecord): Long {
-        val db = writableDatabase
+    /**
+     * Inserts an incident record into the audit log table.
+     */
+    fun insertIncidentLog(incidentRecord: IncidentRecord): Long {
+        val writableDb = writableDatabase
         val timelineJson = try {
-            Json.encodeToString(record.timeline)
-        } catch (e: Exception) {
+            Json.encodeToString(incidentRecord.timeline)
+        } catch (serializationException: Exception) {
             "[]"
         }
 
-        val values = ContentValues().apply {
-            put(COL_LOG_INCIDENT_ID, record.incidentId)
-            put(COL_LOG_TRIGGER_SOURCE, record.triggerSource)
-            put(COL_LOG_DETECTED_PHRASE, record.initialDetectedPhrase)
-            put(COL_LOG_FINAL_STATE, record.finalState)
-            put(COL_LOG_START_TIME, record.startTimeMillis)
-            if (record.resolvedTimeMillis != null) {
-                put(COL_LOG_RESOLVED_TIME, record.resolvedTimeMillis)
+        val logValues = ContentValues().apply {
+            put(COL_LOG_INCIDENT_ID, incidentRecord.incidentId)
+            put(COL_LOG_TRIGGER_SOURCE, incidentRecord.triggerSource)
+            put(COL_LOG_DETECTED_PHRASE, incidentRecord.initialDetectedPhrase)
+            put(COL_LOG_FINAL_STATE, incidentRecord.finalState)
+            put(COL_LOG_START_TIME, incidentRecord.startTimeMillis)
+            if (incidentRecord.resolvedTimeMillis != null) {
+                put(COL_LOG_RESOLVED_TIME, incidentRecord.resolvedTimeMillis)
             } else {
                 putNull(COL_LOG_RESOLVED_TIME)
             }
-            if (record.latitude != null) put(COL_LOG_LATITUDE, record.latitude) else putNull(COL_LOG_LATITUDE)
-            if (record.longitude != null) put(COL_LOG_LONGITUDE, record.longitude) else putNull(COL_LOG_LONGITUDE)
-            if (record.locationAccuracyMeters != null) put(COL_LOG_ACCURACY, record.locationAccuracyMeters) else putNull(COL_LOG_ACCURACY)
-            put(COL_LOG_IS_SIMULATED, if (record.isSimulated) 1 else 0)
-            put(COL_LOG_CONTACTS_ATTEMPTED, record.contactsAttempted)
-            put(COL_LOG_CONTACTS_SENT, record.contactsSent)
-            put(COL_LOG_CALL_INITIATED, if (record.emergencyCallInitiated) 1 else 0)
+            if (incidentRecord.latitude != null) put(COL_LOG_LATITUDE, incidentRecord.latitude) else putNull(COL_LOG_LATITUDE)
+            if (incidentRecord.longitude != null) put(COL_LOG_LONGITUDE, incidentRecord.longitude) else putNull(COL_LOG_LONGITUDE)
+            if (incidentRecord.locationAccuracyMeters != null) put(COL_LOG_ACCURACY, incidentRecord.locationAccuracyMeters) else putNull(COL_LOG_ACCURACY)
+            put(COL_LOG_IS_SIMULATED, if (incidentRecord.isSimulated) 1 else 0)
+            put(COL_LOG_CONTACTS_ATTEMPTED, incidentRecord.contactsAttempted)
+            put(COL_LOG_CONTACTS_SENT, incidentRecord.contactsSent)
+            put(COL_LOG_CALL_INITIATED, if (incidentRecord.emergencyCallInitiated) 1 else 0)
             put(COL_LOG_TIMELINE_JSON, timelineJson)
-            put(COL_LOG_NOTES, record.notes)
+            put(COL_LOG_NOTES, incidentRecord.notes)
         }
 
-        return db.insertWithOnConflict(
+        return writableDb.insertWithOnConflict(
             TABLE_INCIDENT_LOGS,
             null,
-            values,
+            logValues,
             SQLiteDatabase.CONFLICT_REPLACE
         )
     }
 
+    /**
+     * Retrieves all historical incident logs sorted by newest first.
+     */
     fun getAllIncidentLogs(): List<IncidentRecord> {
-        val db = readableDatabase
-        val list = mutableListOf<IncidentRecord>()
-        val cursor = db.query(
+        val readableDb = readableDatabase
+        val incidentList = mutableListOf<IncidentRecord>()
+        val queryCursor = readableDb.query(
             TABLE_INCIDENT_LOGS,
             null,
             null,
@@ -564,17 +686,20 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             null,
             "$COL_LOG_START_TIME DESC"
         )
-        cursor.use {
-            while (it.moveToNext()) {
-                list.add(cursorToIncidentRecord(it))
+        queryCursor.use { cursor ->
+            while (cursor.moveToNext()) {
+                incidentList.add(cursorToIncidentRecord(cursor))
             }
         }
-        return list
+        return incidentList
     }
 
+    /**
+     * Retrieves a single incident record by its unique incident ID.
+     */
     fun getIncidentLogById(incidentId: String): IncidentRecord? {
-        val db = readableDatabase
-        val cursor = db.query(
+        val readableDb = readableDatabase
+        val queryCursor = readableDb.query(
             TABLE_INCIDENT_LOGS,
             null,
             "$COL_LOG_INCIDENT_ID = ?",
@@ -583,28 +708,39 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             null,
             null
         )
-        return cursor.use {
-            if (it.moveToFirst()) cursorToIncidentRecord(it) else null
+        return queryCursor.use { cursor ->
+            if (cursor.moveToFirst()) cursorToIncidentRecord(cursor) else null
         }
     }
 
+    /**
+     * Deletes a single incident record.
+     */
     fun deleteIncidentLog(incidentId: String): Int {
-        val db = writableDatabase
-        return db.delete(TABLE_INCIDENT_LOGS, "$COL_LOG_INCIDENT_ID = ?", arrayOf(incidentId))
+        val writableDb = writableDatabase
+        return writableDb.delete(TABLE_INCIDENT_LOGS, "$COL_LOG_INCIDENT_ID = ?", arrayOf(incidentId))
     }
 
+    /**
+     * Clears all incident logs from disk.
+     */
     fun clearAllIncidentLogs(): Int {
-        val db = writableDatabase
-        return db.delete(TABLE_INCIDENT_LOGS, null, null)
+        val writableDb = writableDatabase
+        return writableDb.delete(TABLE_INCIDENT_LOGS, null, null)
     }
 
+    /**
+     * Converts a database cursor row into an [IncidentRecord] object.
+     */
     private fun cursorToIncidentRecord(cursor: Cursor): IncidentRecord {
-        val timelineRaw = cursor.getString(cursor.getColumnIndexOrThrow(COL_LOG_TIMELINE_JSON))
-        val timeline = try {
-            if (!timelineRaw.isNullOrBlank()) {
-                Json.decodeFromString<List<IncidentTimelineEntry>>(timelineRaw)
-            } else emptyList()
-        } catch (e: Exception) {
+        val timelineRawJson = cursor.getString(cursor.getColumnIndexOrThrow(COL_LOG_TIMELINE_JSON))
+        val parsedTimeline = try {
+            if (!timelineRawJson.isNullOrBlank()) {
+                Json.decodeFromString<List<IncidentTimelineEntry>>(timelineRawJson)
+            } else {
+                emptyList()
+            }
+        } catch (deserializationException: Exception) {
             emptyList()
         }
 
@@ -622,7 +758,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
             contactsAttempted = cursor.getInt(cursor.getColumnIndexOrThrow(COL_LOG_CONTACTS_ATTEMPTED)),
             contactsSent = cursor.getInt(cursor.getColumnIndexOrThrow(COL_LOG_CONTACTS_SENT)),
             emergencyCallInitiated = cursor.getInt(cursor.getColumnIndexOrThrow(COL_LOG_CALL_INITIATED)) == 1,
-            timeline = timeline,
+            timeline = parsedTimeline,
             notes = cursor.getString(cursor.getColumnIndexOrThrow(COL_LOG_NOTES))
         )
     }

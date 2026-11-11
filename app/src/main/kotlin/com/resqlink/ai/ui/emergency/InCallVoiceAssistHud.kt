@@ -2,7 +2,6 @@ package com.resqlink.ai.ui.emergency
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +26,19 @@ import androidx.compose.ui.unit.sp
 import com.resqlink.ai.domain.model.LocationSnapshot
 import com.resqlink.ai.domain.model.UserProfile
 
+/**
+ * # InCallVoiceAssistHud
+ *
+ * Full-screen head-up display (HUD) active while ResQLink AI is on an ongoing emergency call.
+ *
+ * Ordinary Human Overview:
+ * When an unconscious victim is in an accident, their phone dials 911 and puts the call on speakerphone:
+ * 1. **Live Transcript**: Displays the exact words the AI is speaking to the 911 dispatcher.
+ * 2. **Animated Waveform**: Shows visual microphone/speaker feedback so helpers on scene see activity.
+ * 3. **Dispatcher Q&A Dialogue**: Displays questions asked by the dispatcher and the AI's factual answers.
+ * 4. **Patient Identity Strip**: Shows the victim's name, blood type, and known allergies.
+ * 5. **"I AM CONSCIOUS" Button**: Allows the patient to tap and instantly take over the call from the AI.
+ */
 @Composable
 fun InCallVoiceAssistHud(
     targetName: String,
@@ -438,16 +450,16 @@ fun AudioWaveformDisplay(
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "waveformTransition")
-    val heights = List(12) { index ->
-        val duration = 400 + (index * 80)
+    val animatedBarHeights = List(12) { barIndex ->
+        val durationMilliseconds = 400 + (barIndex * 80)
         infiniteTransition.animateFloat(
             initialValue = 6f,
-            targetValue = if (isSpeaking) 28f + (index % 4 * 6f) else 8f,
+            targetValue = if (isSpeaking) 28f + (barIndex % 4 * 6f) else 8f,
             animationSpec = infiniteRepeatable(
-                animation = tween(duration, easing = FastOutSlowInEasing),
+                animation = tween(durationMilliseconds, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse
             ),
-            label = "barHeight$index"
+            label = "barHeight$barIndex"
         )
     }
 
@@ -458,7 +470,7 @@ fun AudioWaveformDisplay(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        heights.forEach { heightState ->
+        animatedBarHeights.forEach { heightState ->
             Box(
                 modifier = Modifier
                     .width(4.dp)

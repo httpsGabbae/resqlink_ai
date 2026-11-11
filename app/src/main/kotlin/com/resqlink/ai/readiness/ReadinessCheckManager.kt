@@ -1,7 +1,6 @@
 package com.resqlink.ai.readiness
 
 import android.Manifest
-import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -13,50 +12,70 @@ import androidx.core.content.ContextCompat
 import com.resqlink.ai.data.local.HotlineDatabaseHelper
 import com.resqlink.ai.service.GuardianForegroundService
 
+/**
+ * # ReadinessCheckManager
+ *
+ * Runs comprehensive on-device diagnostic audits to verify all emergency subsystems.
+ *
+ * Ordinary Human Overview:
+ * When danger strikes, you need to know *beforehand* if your phone is properly configured.
+ * This manager tests 8 essential safety checkpoints:
+ * 1. **Microphone**: Checks physical hardware and `RECORD_AUDIO` permission.
+ * 2. **Guardian Background Service**: Checks if hands-free keyword detection is actively listening.
+ * 3. **GPS Location**: Checks fine location permission and device location toggle.
+ * 4. **SMS Dispatch**: Checks `SEND_SMS` permission and physical SIM readiness.
+ * 5. **Emergency Contacts**: Verifies that trusted ICE contacts exist and are authorized.
+ * 6. **Notifications**: Verifies lockscreen heads-up alerts are not blocked by the OS.
+ * 7. **Battery Optimization**: Checks if Android Doze will aggressively kill background services.
+ * 8. **Cellular Network**: Verifies connection to a carrier (Globe, Smart, DITO) for calls.
+ */
 class ReadinessCheckManager(
     private val context: Context,
-    private val dbHelper: HotlineDatabaseHelper = HotlineDatabaseHelper(context)
+    private val databaseHelper: HotlineDatabaseHelper = HotlineDatabaseHelper(context)
 ) {
 
+    /**
+     * Executes the diagnostic suite and aggregates results into a [ReadinessReport].
+     */
     fun runDiagnostics(): ReadinessReport {
-        val items = mutableListOf<DiagnosticItem>()
+        val diagnosticResultsList = mutableListOf<DiagnosticItem>()
 
         // 1. Microphone Hardware & Permission
-        items.add(checkMicrophone())
+        diagnosticResultsList.add(checkMicrophoneStatus())
 
         // 2. Guardian Mode Service State
-        items.add(checkGuardianService())
+        diagnosticResultsList.add(checkGuardianServiceStatus())
 
         // 3. Location Hardware & Permission
-        items.add(checkLocation())
+        diagnosticResultsList.add(checkLocationStatus())
 
         // 4. SMS Dispatch Capabilities
-        items.add(checkSms())
+        diagnosticResultsList.add(checkSmsDispatchStatus())
 
         // 5. Emergency Contacts Configuration
-        items.add(checkEmergencyContacts())
+        diagnosticResultsList.add(checkEmergencyContactsStatus())
 
         // 6. Notifications & Heads-Up Alerts
-        items.add(checkNotifications())
+        diagnosticResultsList.add(checkNotificationsStatus())
 
         // 7. Battery Optimization / Background Restrictions
-        items.add(checkBatteryOptimization())
+        diagnosticResultsList.add(checkBatteryOptimizationStatus())
 
         // 8. Cellular Network & Telephony
-        items.add(checkCellularNetwork())
+        diagnosticResultsList.add(checkCellularNetworkStatus())
 
-        val overallPass = items.none { it.status == DiagnosticStatus.FAIL }
+        val isSystemFullyOperational = diagnosticResultsList.none { it.status == DiagnosticStatus.FAIL }
 
         return ReadinessReport(
-            overallPass = overallPass,
+            overallPass = isSystemFullyOperational,
             timestamp = System.currentTimeMillis(),
-            items = items
+            items = diagnosticResultsList
         )
     }
 
-    private fun checkMicrophone(): DiagnosticItem {
-        val hasFeature = context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
-        if (!hasFeature) {
+    private fun checkMicrophoneStatus(): DiagnosticItem {
+        val hasMicrophoneHardware = context.packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+        if (!hasMicrophoneHardware) {
             return DiagnosticItem(
                 id = "mic_hardware",
                 category = "Sensors",
@@ -66,12 +85,12 @@ class ReadinessCheckManager(
             )
         }
 
-        val hasPermission = ContextCompat.checkSelfPermission(
+        val hasAudioRecordingPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
 
-        return if (hasPermission) {
+        return if (hasAudioRecordingPermission) {
             DiagnosticItem(
                 id = "mic_permission",
                 category = "Sensors",
@@ -91,9 +110,9 @@ class ReadinessCheckManager(
         }
     }
 
-    private fun checkGuardianService(): DiagnosticItem {
-        val isRunning = GuardianForegroundService.isRunning
-        return if (isRunning) {
+    private fun checkGuardianServiceStatus(): DiagnosticItem {
+        val isServiceCurrentlyRunning = GuardianForegroundService.isRunning
+        return if (isServiceCurrentlyRunning) {
             DiagnosticItem(
                 id = "guardian_service",
                 category = "Background AI",
@@ -113,13 +132,13 @@ class ReadinessCheckManager(
         }
     }
 
-    private fun checkLocation(): DiagnosticItem {
-        val hasFine = ContextCompat.checkSelfPermission(
+    private fun checkLocationStatus(): DiagnosticItem {
+        val hasFineLocationPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasFine) {
+        if (!hasFineLocationPermission) {
             return DiagnosticItem(
                 id = "location_perm",
                 category = "Location",
@@ -131,7 +150,7 @@ class ReadinessCheckManager(
         }
 
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        val isGpsEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val isGpsHardwareEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             locationManager?.isLocationEnabled == true
         } else {
             @Suppress("DEPRECATION")
@@ -139,7 +158,7 @@ class ReadinessCheckManager(
                     locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true
         }
 
-        return if (isGpsEnabled) {
+        return if (isGpsHardwareEnabled) {
             DiagnosticItem(
                 id = "location_hw",
                 category = "Location",
@@ -159,17 +178,17 @@ class ReadinessCheckManager(
         }
     }
 
-    private fun checkSms(): DiagnosticItem {
-        val hasSmsPerm = ContextCompat.checkSelfPermission(
+    private fun checkSmsDispatchStatus(): DiagnosticItem {
+        val hasSmsPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
 
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-        val hasSim = telephonyManager?.simState == TelephonyManager.SIM_STATE_READY
+        val isSimReady = telephonyManager?.simState == TelephonyManager.SIM_STATE_READY
 
         return when {
-            !hasSmsPerm -> DiagnosticItem(
+            !hasSmsPermission -> DiagnosticItem(
                 id = "sms_perm",
                 category = "Telephony",
                 name = "Emergency SMS Dispatch",
@@ -177,7 +196,7 @@ class ReadinessCheckManager(
                 detail = "SEND_SMS permission is not granted.",
                 remediation = "Grant SMS permission so emergency alerts with live GPS can reach trusted contacts."
             )
-            !hasSim -> DiagnosticItem(
+            !isSimReady -> DiagnosticItem(
                 id = "sms_sim",
                 category = "Telephony",
                 name = "SIM Card Status",
@@ -195,10 +214,10 @@ class ReadinessCheckManager(
         }
     }
 
-    private fun checkEmergencyContacts(): DiagnosticItem {
-        val contacts = dbHelper.getTrustedContacts()
+    private fun checkEmergencyContactsStatus(): DiagnosticItem {
+        val savedContactsList = databaseHelper.getTrustedContacts()
         return when {
-            contacts.isEmpty() -> DiagnosticItem(
+            savedContactsList.isEmpty() -> DiagnosticItem(
                 id = "contacts_list",
                 category = "Safety Net",
                 name = "Trusted ICE Contacts",
@@ -206,12 +225,12 @@ class ReadinessCheckManager(
                 detail = "Zero trusted emergency contacts are configured in the Contacts tab.",
                 remediation = "Add at least one family member or guardian in the Contacts screen."
             )
-            contacts.none { it.isAuthorizedForSafetyCheck } -> DiagnosticItem(
+            savedContactsList.none { it.isAuthorizedForSafetyCheck } -> DiagnosticItem(
                 id = "contacts_auth",
                 category = "Safety Net",
                 name = "Trusted ICE Contacts",
                 status = DiagnosticStatus.WARNING,
-                detail = "${contacts.size} contact(s) configured, but none are authorized to receive emergency SMS.",
+                detail = "${savedContactsList.size} contact(s) configured, but none are authorized to receive emergency SMS.",
                 remediation = "Enable 'Authorize Emergency SMS' on your trusted contact."
             )
             else -> DiagnosticItem(
@@ -219,14 +238,14 @@ class ReadinessCheckManager(
                 category = "Safety Net",
                 name = "Trusted ICE Contacts",
                 status = DiagnosticStatus.PASS,
-                detail = "${contacts.count { it.isAuthorizedForSafetyCheck }} contact(s) configured and authorized to receive emergency alerts."
+                detail = "${savedContactsList.count { it.isAuthorizedForSafetyCheck }} contact(s) configured and authorized to receive emergency alerts."
             )
         }
     }
 
-    private fun checkNotifications(): DiagnosticItem {
-        val areEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
-        if (!areEnabled) {
+    private fun checkNotificationsStatus(): DiagnosticItem {
+        val areNotificationsGloballyEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        if (!areNotificationsGloballyEnabled) {
             return DiagnosticItem(
                 id = "notif_system",
                 category = "Alerts",
@@ -238,11 +257,11 @@ class ReadinessCheckManager(
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPerm = ContextCompat.checkSelfPermission(
+            val hasPostNotificationsPermission = ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-            if (!hasPerm) {
+            if (!hasPostNotificationsPermission) {
                 return DiagnosticItem(
                     id = "notif_perm",
                     category = "Alerts",
@@ -263,11 +282,11 @@ class ReadinessCheckManager(
         )
     }
 
-    private fun checkBatteryOptimization(): DiagnosticItem {
+    private fun checkBatteryOptimizationStatus(): DiagnosticItem {
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-        val isIgnoring = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+        val isIgnoringBatteryOptimizations = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
 
-        return if (isIgnoring) {
+        return if (isIgnoringBatteryOptimizations) {
             DiagnosticItem(
                 id = "battery_opt",
                 category = "Reliability",
@@ -287,16 +306,16 @@ class ReadinessCheckManager(
         }
     }
 
-    private fun checkCellularNetwork(): DiagnosticItem {
+    private fun checkCellularNetworkStatus(): DiagnosticItem {
         val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-        val networkOperator = telephonyManager?.networkOperatorName
-        return if (!networkOperator.isNullOrBlank()) {
+        val carrierNetworkName = telephonyManager?.networkOperatorName
+        return if (!carrierNetworkName.isNullOrBlank()) {
             DiagnosticItem(
                 id = "cellular_carrier",
                 category = "Telephony",
                 name = "Carrier Network",
                 status = DiagnosticStatus.PASS,
-                detail = "Registered on carrier: $networkOperator"
+                detail = "Registered on carrier: $carrierNetworkName"
             )
         } else {
             DiagnosticItem(

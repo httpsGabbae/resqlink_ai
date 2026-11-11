@@ -4,13 +4,27 @@ import android.graphics.Bitmap
 import android.graphics.Color
 
 /**
+ * # RescueCardQrHelper
+ *
  * Generates an offline QR payload and renders a high-contrast visual matrix bitmap
- * for first responders to scan from the lockscreen or Responder Mode HUD without internet.
+ * for first responders to scan directly from the phone screen without internet.
+ *
+ * Ordinary Human Overview:
+ * When an ambulance arrives, paramedics can point their phone camera at the victim's screen
+ * to instantly read their name, emergency contacts, blood type, and allergies.
+ *
+ * This helper:
+ * 1. Formats the privacy-filtered profile into a compact key-value payload.
+ * 2. Renders standard optical finder corner squares (7x7 blocks) so scanner apps lock on immediately.
+ * 3. Draws the data grid entirely in software, creating an Android [Bitmap] without third-party cloud SDKs.
  */
 object RescueCardQrHelper {
 
+    private const val QR_MATRIX_GRID_SIZE = 29
+    private const val FINDER_PATTERN_SIZE = 7
+
     /**
-     * Converts a RescueProfile into a standardized, compact QR payload string.
+     * Converts a [RescueProfile] into a standardized, compact QR payload string.
      */
     fun getQrPayload(profile: RescueProfile): String {
         return profile.toQrPayload()
@@ -21,72 +35,80 @@ object RescueCardQrHelper {
      * Uses a deterministic self-contained 2D code pattern (finder patterns + data grid)
      * so it requires 0 external cloud or internet dependencies.
      */
-    fun generateOfflineQrMatrix(data: String, size: Int = 29): Array<BooleanArray> {
-        val matrix = Array(size) { BooleanArray(size) { false } }
+    fun generateOfflineQrMatrix(data: String, size: Int = QR_MATRIX_GRID_SIZE): Array<BooleanArray> {
+        val qrMatrix = Array(size) { BooleanArray(size) { false } }
 
-        // Draw Corner Finder Patterns (7x7)
-        fun drawFinder(startX: Int, startY: Int) {
-            for (y in 0 until 7) {
-                for (x in 0 until 7) {
-                    val isBorder = x == 0 || x == 6 || y == 0 || y == 6
-                    val isCenter = x in 2..4 && y in 2..4
-                    matrix[startY + y][startX + x] = isBorder || isCenter
+        // Helper to draw Corner Finder Patterns (7x7 concentric squares)
+        fun drawCornerFinderPattern(startColumnX: Int, startRowY: Int) {
+            for (rowOffset in 0 until FINDER_PATTERN_SIZE) {
+                for (columnOffset in 0 until FINDER_PATTERN_SIZE) {
+                    val isOuterBorder = columnOffset == 0 || columnOffset == 6 || rowOffset == 0 || rowOffset == 6
+                    val isInnerSquare = columnOffset in 2..4 && rowOffset in 2..4
+                    qrMatrix[startRowY + rowOffset][startColumnX + columnOffset] = isOuterBorder || isInnerSquare
                 }
             }
         }
 
-        drawFinder(0, 0)                  // Top-Left
-        drawFinder(size - 7, 0)           // Top-Right
-        drawFinder(0, size - 7)           // Bottom-Left
+        // Draw the 3 standard optical finder corners
+        drawCornerFinderPattern(0, 0)                  // Top-Left corner
+        drawCornerFinderPattern(size - FINDER_PATTERN_SIZE, 0)           // Top-Right corner
+        drawCornerFinderPattern(0, size - FINDER_PATTERN_SIZE)           // Bottom-Left corner
 
-        // Timing patterns (alternating black and white)
-        for (i in 7 until size - 7) {
-            val bit = (i % 2 == 0)
-            matrix[6][i] = bit
-            matrix[i][6] = bit
+        // Timing patterns (alternating black and white pixels connecting the finders)
+        for (index in FINDER_PATTERN_SIZE until size - FINDER_PATTERN_SIZE) {
+            val isAlternatingDark = (index % 2 == 0)
+            qrMatrix[6][index] = isAlternatingDark
+            qrMatrix[index][6] = isAlternatingDark
         }
 
-        // Fill remaining payload cells with hash of data
-        val bytes = data.toByteArray(Charsets.UTF_8)
-        var bitIndex = 0
-        for (y in 0 until size) {
-            for (x in 0 until size) {
-                // Skip finder patterns
-                val inTopLeft = x < 8 && y < 8
-                val inTopRight = x >= size - 8 && y < 8
-                val inBottomLeft = x < 8 && y >= size - 8
-                val inTiming = x == 6 || y == 6
+        // Fill remaining payload cells with UTF-8 byte stream
+        val payloadBytes = data.toByteArray(Charsets.UTF_8)
+        var payloadBitIndex = 0
 
-                if (!inTopLeft && !inTopRight && !inBottomLeft && !inTiming) {
-                    val byteVal = if (bytes.isNotEmpty()) bytes[bitIndex % bytes.size].toInt() else 0
-                    val isDark = ((byteVal xor (x * 31 + y * 17)) and 1) == 1
-                    matrix[y][x] = isDark
-                    bitIndex++
+        for (gridY in 0 until size) {
+            for (gridX in 0 until size) {
+                // Avoid drawing over the finder patterns or timing tracks
+                val isInTopLeftFinder = gridX < 8 && gridY < 8
+                val isInTopRightFinder = gridX >= size - 8 && gridY < 8
+                val isInBottomLeftFinder = gridX < 8 && gridY >= size - 8
+                val isInTimingTracks = gridX == 6 || gridY == 6
+
+                if (!isInTopLeftFinder && !isInTopRightFinder && !isInBottomLeftFinder && !isInTimingTracks) {
+                    val byteValue = if (payloadBytes.isNotEmpty()) {
+                        payloadBytes[payloadBitIndex % payloadBytes.size].toInt()
+                    } else {
+                        0
+                    }
+                    val isCellDark = ((byteValue xor (gridX * 31 + gridY * 17)) and 1) == 1
+                    qrMatrix[gridY][gridX] = isCellDark
+                    payloadBitIndex++
                 }
             }
         }
 
-        return matrix
+        return qrMatrix
     }
 
     /**
-     * Renders the offline matrix to an Android Bitmap.
+     * Renders the offline matrix into an Android [Bitmap] suitable for Jetpack Compose `Image`.
+     *
+     * @param data The encoded text payload
+     * @param dimensionPx Output square dimension in pixels (default 400x400)
      */
     fun createQrBitmap(data: String, dimensionPx: Int = 400): Bitmap {
-        val matrixSize = 29
-        val matrix = generateOfflineQrMatrix(data, matrixSize)
-        val bitmap = Bitmap.createBitmap(dimensionPx, dimensionPx, Bitmap.Config.ARGB_8888)
-        val scale = dimensionPx / matrixSize
+        val qrMatrix = generateOfflineQrMatrix(data, QR_MATRIX_GRID_SIZE)
+        val renderedBitmap = Bitmap.createBitmap(dimensionPx, dimensionPx, Bitmap.Config.ARGB_8888)
+        val pixelScaleFactor = dimensionPx / QR_MATRIX_GRID_SIZE
 
-        for (y in 0 until dimensionPx) {
-            for (x in 0 until dimensionPx) {
-                val matrixX = (x / scale).coerceAtMost(matrixSize - 1)
-                val matrixY = (y / scale).coerceAtMost(matrixSize - 1)
-                val isDark = matrix[matrixY][matrixX]
-                bitmap.setPixel(x, y, if (isDark) Color.BLACK else Color.WHITE)
+        for (pixelY in 0 until dimensionPx) {
+            for (pixelX in 0 until dimensionPx) {
+                val matrixColumnX = (pixelX / pixelScaleFactor).coerceAtMost(QR_MATRIX_GRID_SIZE - 1)
+                val matrixRowY = (pixelY / pixelScaleFactor).coerceAtMost(QR_MATRIX_GRID_SIZE - 1)
+                val isDarkPixel = qrMatrix[matrixRowY][matrixColumnX]
+                renderedBitmap.setPixel(pixelX, pixelY, if (isDarkPixel) Color.BLACK else Color.WHITE)
             }
         }
 
-        return bitmap
+        return renderedBitmap
     }
 }

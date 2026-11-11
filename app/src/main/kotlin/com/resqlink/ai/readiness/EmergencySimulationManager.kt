@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * # SimulationState
+ *
+ * Observable state tracking the interactive progress of a dry-run emergency drill.
+ */
 data class SimulationState(
     val isRunning: Boolean = false,
     val simulatedIncident: EmergencyIncident? = null,
@@ -22,19 +27,35 @@ data class SimulationState(
 )
 
 /**
+ * # EmergencySimulationManager
+ *
  * Isolated Emergency Simulation Engine.
  * Safely runs the entire emergency lifecycle without placing real calls or sending real cellular SMS messages.
+ *
+ * Ordinary Human Overview:
+ * In a real emergency, panic sets in. Users need a safe "fire drill" mode to understand
+ * exactly what their phone will do—see the 10-second countdown, hear the alarm sound,
+ * and preview the SMS that family members will receive—WITHOUT actually spamming their loved
+ * ones with real text messages or calling 911.
+ *
+ * Safety-Critical Architecture Guarantee:
+ * All telephony and radio hardware transmissions are strictly intercepted and blocked.
+ * The simulation writes audit entries tagged [isSimulated = true] so test runs are never
+ * confused with real-life distress events.
  */
 class EmergencySimulationManager(
-    private val eventManager: EmergencyEventManager = EmergencyEventManager.getInstance()
+    private val emergencyEventManager: EmergencyEventManager = EmergencyEventManager.getInstance()
 ) {
 
     private val _simulationState = MutableStateFlow(SimulationState())
     val simulationState: StateFlow<SimulationState> = _simulationState.asStateFlow()
 
-    private var simulationJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var activeSimulationCoroutineJob: Job? = null
+    private val simulationCoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
+    /**
+     * Starts an interactive dry-run simulation of a voice distress alert.
+     */
     fun startSimulation(
         simulatedPhrase: String = "Resqlink Tulong! [TEST SIMULATION]",
         mockLocation: LocationSnapshot = LocationSnapshot(
@@ -49,10 +70,10 @@ class EmergencySimulationManager(
             TrustedContact(2, "Secondary Emergency Contact", "0918-000-0002", "ICE", true)
         )
     ) {
-        stopSimulation()
+        stopSimulation("Restarting fresh simulation")
 
         // 1. Register through centralized EmergencyEventManager as a simulated incident
-        val (incident, _) = eventManager.registerTrigger(
+        val (simulatedIncident, _) = emergencyEventManager.registerTrigger(
             source = EmergencyTriggerSource.SIMULATION_TEST,
             detectedPhrase = simulatedPhrase,
             location = mockLocation,
@@ -63,40 +84,41 @@ class EmergencySimulationManager(
 
         _simulationState.value = SimulationState(
             isRunning = true,
-            simulatedIncident = incident,
+            simulatedIncident = simulatedIncident,
             remainingSeconds = 10,
             generatedSmsPreview = previewMessage,
             simulatedContacts = targetContacts,
             stepDescription = "Simulated distress keyword detected: \"$simulatedPhrase\"",
             logs = listOf(
-                "[SIM-START] Registered simulated incident ${incident.incidentId}",
+                "[SIM-START] Registered simulated incident ${simulatedIncident.incidentId}",
                 "[SAFETY] Live SMS dispatch and cellular calling physically BLOCKED during simulation",
                 "[GPS] Attached mock coordinates: ${mockLocation.latitude}, ${mockLocation.longitude}"
             )
         )
 
-        simulationJob = scope.launch {
-            for (sec in 9 downTo 1) {
+        activeSimulationCoroutineJob = simulationCoroutineScope.launch {
+            // Count down from 9 to 1 second
+            for (countdownSecond in 9 downTo 1) {
                 delay(1000L)
-                val current = _simulationState.value
-                if (!current.isRunning) return@launch
-                _simulationState.value = current.copy(
-                    remainingSeconds = sec,
-                    stepDescription = "Simulated Countdown: $sec seconds remaining to dispatch",
-                    logs = current.logs + "[T-$sec] Awaiting confirmation or cancel..."
+                val currentState = _simulationState.value
+                if (!currentState.isRunning) return@launch
+                _simulationState.value = currentState.copy(
+                    remainingSeconds = countdownSecond,
+                    stepDescription = "Simulated Countdown: $countdownSecond seconds remaining to dispatch",
+                    logs = currentState.logs + "[T-$countdownSecond] Awaiting confirmation or cancel..."
                 )
             }
 
             delay(1000L)
-            // Simulated timeout: escalate to simulated contact alert (WITHOUT sending real SMS!)
-            val updatedIncident = eventManager.transitionState(
-                incident.incidentId,
+            // Simulated timeout: transition to simulated contact alert (WITHOUT sending real SMS!)
+            val updatedIncident = emergencyEventManager.transitionState(
+                simulatedIncident.incidentId,
                 IncidentLifecycleState.CONTACT_ALERTING,
                 "Simulated 10s timeout: dispatching mock contact alerts"
             )
 
-            eventManager.recordContactAlertResult(
-                incidentId = incident.incidentId,
+            emergencyEventManager.recordContactAlertResult(
+                incidentId = simulatedIncident.incidentId,
                 attempted = targetContacts.size,
                 sent = targetContacts.size
             )
@@ -114,15 +136,18 @@ class EmergencySimulationManager(
             )
 
             delay(3000L)
-            eventManager.resolveIncident(incident.incidentId, "Simulation test completed successfully")
+            emergencyEventManager.resolveIncident(simulatedIncident.incidentId, "Simulation test completed successfully")
         }
     }
 
+    /**
+     * Immediately aborts any ongoing simulation and records the cancellation in the incident manager.
+     */
     fun stopSimulation(reason: String = "User Aborted Simulation") {
-        simulationJob?.cancel()
-        val active = _simulationState.value.simulatedIncident
-        if (active != null) {
-            eventManager.cancelIncident(active.incidentId, reason)
+        activeSimulationCoroutineJob?.cancel()
+        val activeSimulatedIncident = _simulationState.value.simulatedIncident
+        if (activeSimulatedIncident != null) {
+            emergencyEventManager.cancelIncident(activeSimulatedIncident.incidentId, reason)
         }
         _simulationState.value = SimulationState(
             isRunning = false,

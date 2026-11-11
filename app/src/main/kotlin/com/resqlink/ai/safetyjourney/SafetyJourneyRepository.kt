@@ -8,78 +8,110 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+/**
+ * # SafetyJourneyRepository
+ *
+ * Persists and streams the user's active travel session and historical journey logs.
+ *
+ * Ordinary Human Overview:
+ * If your phone battery dies, or if Android kills the app to reclaim memory while you are
+ * in a taxi, your active safety session cannot be lost.
+ *
+ * This repository:
+ * 1. Serializes the active [SafetyJourney] directly to private device storage (`SharedPreferences`) as JSON.
+ * 2. Restores the exact deadline timestamps immediately upon app restart.
+ * 3. Exposes reactive Kotlin `StateFlow` streams so Compose UI widgets update automatically
+ *    whenever a journey begins, extends, or completes.
+ * 4. Maintains a rotating historical log of the last 20 completed or escalated journeys.
+ */
 class SafetyJourneyRepository(context: Context) {
 
     companion object {
-        private const val PREFS_NAME = "resqlink_safety_journey_prefs"
-        private const val KEY_ACTIVE_JOURNEY = "active_journey_json"
-        private const val KEY_JOURNEY_HISTORY = "journey_history_json"
+        private const val PREFERENCES_FILE_NAME = "resqlink_safety_journey_prefs"
+        private const val KEY_ACTIVE_JOURNEY_JSON = "active_journey_json"
+        private const val KEY_JOURNEY_HISTORY_JSON = "journey_history_json"
+        private const val MAXIMUM_HISTORY_RECORDS = 20
 
         @Volatile
-        private var instance: SafetyJourneyRepository? = null
+        private var singletonInstance: SafetyJourneyRepository? = null
 
         fun getInstance(context: Context): SafetyJourneyRepository {
-            return instance ?: synchronized(this) {
-                instance ?: SafetyJourneyRepository(context.applicationContext).also { instance = it }
+            return singletonInstance ?: synchronized(this) {
+                singletonInstance ?: SafetyJourneyRepository(context.applicationContext).also { singletonInstance = it }
             }
         }
     }
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val sharedPreferences: SharedPreferences =
+        context.getSharedPreferences(PREFERENCES_FILE_NAME, Context.MODE_PRIVATE)
 
-    private val json = Json {
+    private val jsonSerializer: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    private val _activeJourney = MutableStateFlow<SafetyJourney?>(loadActiveJourney())
+    private val _activeJourney = MutableStateFlow<SafetyJourney?>(loadActiveJourneyFromDisk())
     val activeJourney: StateFlow<SafetyJourney?> = _activeJourney.asStateFlow()
 
-    private val _journeyHistory = MutableStateFlow<List<SafetyJourney>>(loadHistory())
+    private val _journeyHistory = MutableStateFlow<List<SafetyJourney>>(loadJourneyHistoryFromDisk())
     val journeyHistory: StateFlow<List<SafetyJourney>> = _journeyHistory.asStateFlow()
 
-    private fun loadActiveJourney(): SafetyJourney? {
-        val stored = prefs.getString(KEY_ACTIVE_JOURNEY, null) ?: return null
+    /**
+     * Reads and decodes the current active journey from persistent disk storage.
+     */
+    private fun loadActiveJourneyFromDisk(): SafetyJourney? {
+        val storedJson = sharedPreferences.getString(KEY_ACTIVE_JOURNEY_JSON, null) ?: return null
         return try {
-            json.decodeFromString<SafetyJourney>(stored)
-        } catch (e: Exception) {
+            jsonSerializer.decodeFromString<SafetyJourney>(storedJson)
+        } catch (exception: Exception) {
             null
         }
     }
 
-    private fun loadHistory(): List<SafetyJourney> {
-        val stored = prefs.getString(KEY_JOURNEY_HISTORY, null) ?: return emptyList()
+    /**
+     * Reads and decodes the past journey history list from persistent disk storage.
+     */
+    private fun loadJourneyHistoryFromDisk(): List<SafetyJourney> {
+        val storedJson = sharedPreferences.getString(KEY_JOURNEY_HISTORY_JSON, null) ?: return emptyList()
         return try {
-            json.decodeFromString<List<SafetyJourney>>(stored)
-        } catch (e: Exception) {
+            jsonSerializer.decodeFromString<List<SafetyJourney>>(storedJson)
+        } catch (exception: Exception) {
             emptyList()
         }
     }
 
+    /**
+     * Writes or clears the active journey in persistent storage and notifies UI observers.
+     */
     @Synchronized
     fun saveActiveJourney(journey: SafetyJourney?) {
         if (journey != null) {
-            val encoded = json.encodeToString(journey)
-            prefs.edit().putString(KEY_ACTIVE_JOURNEY, encoded).apply()
+            val encodedJsonString = jsonSerializer.encodeToString(journey)
+            sharedPreferences.edit().putString(KEY_ACTIVE_JOURNEY_JSON, encodedJsonString).apply()
         } else {
-            prefs.edit().remove(KEY_ACTIVE_JOURNEY).apply()
+            sharedPreferences.edit().remove(KEY_ACTIVE_JOURNEY_JSON).apply()
         }
         _activeJourney.value = journey
     }
 
+    /**
+     * Moves a completed or escalated journey into the historical archive and clears active status.
+     */
     @Synchronized
     fun archiveJourney(journey: SafetyJourney) {
-        val history = (_journeyHistory.value + journey).takeLast(20)
-        val encoded = json.encodeToString(history)
-        prefs.edit().putString(KEY_JOURNEY_HISTORY, encoded).apply()
-        _journeyHistory.value = history
+        val updatedHistoryList = (_journeyHistory.value + journey).takeLast(MAXIMUM_HISTORY_RECORDS)
+        val encodedHistoryJson = jsonSerializer.encodeToString(updatedHistoryList)
+        sharedPreferences.edit().putString(KEY_JOURNEY_HISTORY_JSON, encodedHistoryJson).apply()
+        _journeyHistory.value = updatedHistoryList
         saveActiveJourney(null)
     }
 
+    /**
+     * Clears all saved historical journey logs from disk.
+     */
     @Synchronized
     fun clearHistory() {
-        prefs.edit().remove(KEY_JOURNEY_HISTORY).apply()
+        sharedPreferences.edit().remove(KEY_JOURNEY_HISTORY_JSON).apply()
         _journeyHistory.value = emptyList()
     }
 }

@@ -7,147 +7,196 @@ import android.content.Intent
 import android.os.Build
 import java.util.UUID
 
+/**
+ * # JourneyScheduler
+ *
+ * Coordinates real-time hardware alarms and countdown deadlines for the "Safe Travel" feature.
+ *
+ * Ordinary Human Overview:
+ * When someone travels late at night, takes a taxi, or walks home through unfamiliar territory,
+ * they can activate a "Safety Journey" in ResQLink AI (e.g., 30 minutes to get home + 5-minute grace period).
+ *
+ * This scheduler interfaces directly with Android's system `AlarmManager` using `setExactAndAllowWhileIdle`.
+ * Even if the phone enters deep sleep (Doze mode) in a pocket or bag:
+ * 1. An exact hardware alarm wakes the CPU at the deadline to ask the user: "Did you arrive safely?"
+ * 2. If the user does not respond within the grace period, a secondary alarm triggers automatic
+ *    SMS emergency escalation to trusted family contacts with the traveler's last known GPS coordinates.
+ */
 class JourneyScheduler(private val context: Context) {
 
-    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-    private val repo = SafetyJourneyRepository.getInstance(context)
+    private val systemAlarmManager: AlarmManager? = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+    private val journeyRepository: SafetyJourneyRepository = SafetyJourneyRepository.getInstance(context)
 
+    companion object {
+        private const val CHECK_IN_REQUEST_CODE = 1001
+        private const val GRACE_EXPIRED_REQUEST_CODE = 1002
+        private const val MILLISECONDS_PER_MINUTE = 60 * 1000L
+    }
+
+    /**
+     * Initiates a new monitored travel journey, sets target and grace deadlines,
+     * stores the state to disk, and programs the initial check-in alarm.
+     *
+     * @param destination Plain-text travel destination (e.g., "Home", "Office", "Ayala Mall")
+     * @param durationMinutes Expected travel duration in minutes
+     * @param gracePeriodMinutes Overtime window before family alerting occurs (default 5 min)
+     * @param notes Optional journey notes (e.g., "Taking Taxi Plate ABC-123")
+     */
     fun startJourney(
         destination: String,
         durationMinutes: Int,
         gracePeriodMinutes: Int = 5,
         notes: String = ""
     ): SafetyJourney {
-        val now = System.currentTimeMillis()
-        val deadline = now + (durationMinutes * 60 * 1000L)
-        val graceDeadline = deadline + (gracePeriodMinutes * 60 * 1000L)
+        val currentTimeMillis = System.currentTimeMillis()
+        val checkInDeadlineMillis = currentTimeMillis + (durationMinutes * MILLISECONDS_PER_MINUTE)
+        val graceDeadlineMillis = checkInDeadlineMillis + (gracePeriodMinutes * MILLISECONDS_PER_MINUTE)
 
-        val journey = SafetyJourney(
+        val newJourney = SafetyJourney(
             id = "JRN-${UUID.randomUUID().toString().take(8).uppercase()}",
             destination = destination.ifBlank { "Destination" },
             notes = notes,
-            startTimeMillis = now,
+            startTimeMillis = currentTimeMillis,
             targetDurationMinutes = durationMinutes,
-            deadlineMillis = deadline,
+            deadlineMillis = checkInDeadlineMillis,
             gracePeriodMinutes = gracePeriodMinutes,
-            graceDeadlineMillis = graceDeadline,
+            graceDeadlineMillis = graceDeadlineMillis,
             status = JourneyStatus.ACTIVE
         )
 
-        repo.saveActiveJourney(journey)
-        scheduleCheckInAlarm(journey)
-        return journey
+        journeyRepository.saveActiveJourney(newJourney)
+        scheduleCheckInAlarm(newJourney)
+        return newJourney
     }
 
+    /**
+     * Schedules the primary check-in alarm that reminds the traveler to verify their safety.
+     */
     fun scheduleCheckInAlarm(journey: SafetyJourney) {
-        val intent = Intent(context, JourneyAlarmReceiver::class.java).apply {
+        val reminderIntent = Intent(context, JourneyAlarmReceiver::class.java).apply {
             action = JourneyAlarmReceiver.ACTION_CHECK_IN_REMINDER
             putExtra(JourneyAlarmReceiver.EXTRA_JOURNEY_ID, journey.id)
         }
-        val pendingIntent = PendingIntent.getBroadcast(
+        val pendingCheckInIntent = PendingIntent.getBroadcast(
             context,
-            1001,
-            intent,
+            CHECK_IN_REQUEST_CODE,
+            reminderIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        setAlarmExact(journey.deadlineMillis, pendingIntent)
+        setExactHardwareAlarm(journey.deadlineMillis, pendingCheckInIntent)
     }
 
+    /**
+     * Schedules the grace period expiration alarm that triggers contact escalation
+     * if the traveler failed to respond to the check-in prompt.
+     */
     fun scheduleGraceAlarm(journey: SafetyJourney) {
-        val intent = Intent(context, JourneyAlarmReceiver::class.java).apply {
+        val graceIntent = Intent(context, JourneyAlarmReceiver::class.java).apply {
             action = JourneyAlarmReceiver.ACTION_GRACE_EXPIRED
             putExtra(JourneyAlarmReceiver.EXTRA_JOURNEY_ID, journey.id)
         }
-        val pendingIntent = PendingIntent.getBroadcast(
+        val pendingGraceIntent = PendingIntent.getBroadcast(
             context,
-            1002,
-            intent,
+            GRACE_EXPIRED_REQUEST_CODE,
+            graceIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        setAlarmExact(journey.graceDeadlineMillis, pendingIntent)
+        setExactHardwareAlarm(journey.graceDeadlineMillis, pendingGraceIntent)
     }
 
+    /**
+     * Extends an active journey's deadline (for example, if the user encounters traffic or delays).
+     *
+     * @param additionalMinutes Minutes to append to the journey deadline
+     */
     fun extendJourney(additionalMinutes: Int = 15): SafetyJourney? {
-        val current = repo.activeJourney.value ?: return null
-        val now = System.currentTimeMillis()
-        val baseDeadline = if (current.deadlineMillis > now) current.deadlineMillis else now
-        val newDeadline = baseDeadline + (additionalMinutes * 60 * 1000L)
-        val newGrace = newDeadline + (current.gracePeriodMinutes * 60 * 1000L)
+        val currentJourney = journeyRepository.activeJourney.value ?: return null
+        val currentTimeMillis = System.currentTimeMillis()
+        val baseDeadlineMillis = if (currentJourney.deadlineMillis > currentTimeMillis) currentJourney.deadlineMillis else currentTimeMillis
+        val extendedDeadlineMillis = baseDeadlineMillis + (additionalMinutes * MILLISECONDS_PER_MINUTE)
+        val extendedGraceMillis = extendedDeadlineMillis + (currentJourney.gracePeriodMinutes * MILLISECONDS_PER_MINUTE)
 
-        val updated = current.copy(
-            deadlineMillis = newDeadline,
-            graceDeadlineMillis = newGrace,
+        val updatedJourney = currentJourney.copy(
+            deadlineMillis = extendedDeadlineMillis,
+            graceDeadlineMillis = extendedGraceMillis,
             status = JourneyStatus.ACTIVE,
-            extensionCount = current.extensionCount + 1
+            extensionCount = currentJourney.extensionCount + 1
         )
 
-        repo.saveActiveJourney(updated)
+        journeyRepository.saveActiveJourney(updatedJourney)
         cancelGraceAlarm()
-        scheduleCheckInAlarm(updated)
-        return updated
+        scheduleCheckInAlarm(updatedJourney)
+        return updatedJourney
     }
 
+    /**
+     * Cancels both the primary check-in alarm and any pending grace-period escalation alarms.
+     */
     fun cancelAllAlarms() {
         cancelCheckInAlarm()
         cancelGraceAlarm()
     }
 
     private fun cancelCheckInAlarm() {
-        val intent = Intent(context, JourneyAlarmReceiver::class.java).apply {
+        val reminderIntent = Intent(context, JourneyAlarmReceiver::class.java).apply {
             action = JourneyAlarmReceiver.ACTION_CHECK_IN_REMINDER
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            1001,
-            intent,
+            CHECK_IN_REQUEST_CODE,
+            reminderIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
-        if (pendingIntent != null && alarmManager != null) {
-            alarmManager.cancel(pendingIntent)
+        if (pendingIntent != null && systemAlarmManager != null) {
+            systemAlarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
         }
     }
 
     private fun cancelGraceAlarm() {
-        val intent = Intent(context, JourneyAlarmReceiver::class.java).apply {
+        val graceIntent = Intent(context, JourneyAlarmReceiver::class.java).apply {
             action = JourneyAlarmReceiver.ACTION_GRACE_EXPIRED
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            1002,
-            intent,
+            GRACE_EXPIRED_REQUEST_CODE,
+            graceIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
-        if (pendingIntent != null && alarmManager != null) {
-            alarmManager.cancel(pendingIntent)
+        if (pendingIntent != null && systemAlarmManager != null) {
+            systemAlarmManager.cancel(pendingIntent)
             pendingIntent.cancel()
         }
     }
 
-    private fun setAlarmExact(triggerAtMillis: Long, pendingIntent: PendingIntent) {
-        if (alarmManager == null) return
+    /**
+     * Sets a high-priority, exact hardware alarm that will wake the device CPU from low-power Doze sleep.
+     */
+    private fun setExactHardwareAlarm(triggerTimestampMillis: Long, pendingIntent: PendingIntent) {
+        val alarmManager = systemAlarmManager ?: return
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // Wakes up CPU even during Android Doze mode
                 alarmManager.setExactAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
+                    triggerTimestampMillis,
                     pendingIntent
                 )
             } else {
                 alarmManager.setExact(
                     AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
+                    triggerTimestampMillis,
                     pendingIntent
                 )
             }
-        } catch (e: SecurityException) {
-            // If exact alarm permission is missing on Android 12+, use window or inexact fallback
+        } catch (securityException: SecurityException) {
+            // Fallback for Android 12+ (API 31+) if SCHEDULE_EXACT_ALARM permission is revoked in system settings
             alarmManager.set(
                 AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
+                triggerTimestampMillis,
                 pendingIntent
             )
         }

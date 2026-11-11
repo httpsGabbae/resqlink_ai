@@ -18,14 +18,35 @@ import androidx.compose.ui.unit.sp
 import com.resqlink.ai.domain.model.TrustedContact
 import com.resqlink.ai.ui.emergency.*
 
+/**
+ * =========================================================================================
+ * TRUSTED CONTACTS SCREEN
+ * =========================================================================================
+ * Educational Overview:
+ * This screen manages the user's circle of trusted emergency contacts (ICE - In Case of
+ * Emergency). In safety-critical mobile design, trusted contacts play a vital role in
+ * "Fail-Soft" protection:
+ *
+ * 1. UNVERIFIED INCAPACITATION ESCALATION:
+ *    When the AI voice detector or crash sensors identify suspected distress, a 10-second
+ *    audible/haptic countdown begins. If the user does NOT cancel it, the system does NOT
+ *    auto-call public 911 (which would risk false-alarm swamping of emergency dispatchers).
+ *    Instead, an unverified offline SMS alert containing the user's exact GPS coordinates
+ *    is sent directly to these configured trusted contacts.
+ *
+ * 2. 100% OFFLINE PERSISTENCE:
+ *    All contact records are stored locally in the device's encrypted SharedPreferences.
+ *    No cloud database or external sync is required.
+ * =========================================================================================
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsScreen(
     viewModel: EmergencyViewModel,
     modifier: Modifier = Modifier
 ) {
-    val contacts by viewModel.trustedContacts.collectAsState()
-    var showAddDialog by remember { mutableStateOf(false) }
+    val trustedContactsList by viewModel.trustedContacts.collectAsState()
+    var isAddContactDialogVisible by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -37,6 +58,7 @@ fun ContactsScreen(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
+            // Header: Title, safety subtitle, and Add Contact action button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -58,7 +80,7 @@ fun ContactsScreen(
                 }
 
                 IconButton(
-                    onClick = { showAddDialog = true },
+                    onClick = { isAddContactDialogVisible = true },
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = CrimsonPrimary)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add Contact", tint = Color.White)
@@ -96,7 +118,8 @@ fun ContactsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (contacts.isEmpty()) {
+            // List of trusted contacts or empty-state guidance
+            if (trustedContactsList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -114,10 +137,10 @@ fun ContactsScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(contacts) { contact ->
+                    items(trustedContactsList, key = { it.id }) { contactItem ->
                         ContactCard(
-                            contact = contact,
-                            onDelete = { viewModel.removeTrustedContact(contact.id) }
+                            contact = contactItem,
+                            onDelete = { viewModel.removeTrustedContact(contactItem.id) }
                         )
                     }
                 }
@@ -125,17 +148,21 @@ fun ContactsScreen(
         }
     }
 
-    if (showAddDialog) {
+    // Modal dialog to input a new trusted contact
+    if (isAddContactDialogVisible) {
         AddContactDialog(
-            onDismiss = { showAddDialog = false },
-            onAdd = { name, phone, relationship ->
-                viewModel.addTrustedContact(name, phone, relationship)
-                showAddDialog = false
+            onDismiss = { isAddContactDialogVisible = false },
+            onAdd = { contactName, contactPhoneNumber, contactRelationship ->
+                viewModel.addTrustedContact(contactName, contactPhoneNumber, contactRelationship)
+                isAddContactDialogVisible = false
             }
         )
     }
 }
 
+/**
+ * Visual card displaying a trusted contact's identity, relationship, and mobile number.
+ */
 @Composable
 fun ContactCard(
     contact: TrustedContact,
@@ -200,14 +227,17 @@ fun ContactCard(
     }
 }
 
+/**
+ * Dialog for adding a new emergency contact with name, phone, and family relationship.
+ */
 @Composable
 fun AddContactDialog(
     onDismiss: () -> Unit,
     onAdd: (name: String, phone: String, relationship: String) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var relationship by remember { mutableStateOf("Family") }
+    var contactNameInput by remember { mutableStateOf("") }
+    var contactPhoneNumberInput by remember { mutableStateOf("") }
+    var contactRelationshipInput by remember { mutableStateOf("Family") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -218,8 +248,8 @@ fun AddContactDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
+                    value = contactNameInput,
+                    onValueChange = { contactNameInput = it },
                     label = { Text("Contact Name") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPearl,
@@ -231,8 +261,8 @@ fun AddContactDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
+                    value = contactPhoneNumberInput,
+                    onValueChange = { contactPhoneNumberInput = it },
                     label = { Text("Mobile Number (e.g. 0917xxxxxxx)") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPearl,
@@ -244,8 +274,8 @@ fun AddContactDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = relationship,
-                    onValueChange = { relationship = it },
+                    value = contactRelationshipInput,
+                    onValueChange = { contactRelationshipInput = it },
                     label = { Text("Relationship (e.g. Spouse, Parent, Friend)") },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPearl,
@@ -261,8 +291,8 @@ fun AddContactDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isNotBlank() && phone.isNotBlank()) {
-                        onAdd(name, phone, relationship)
+                    if (contactNameInput.isNotBlank() && contactPhoneNumberInput.isNotBlank()) {
+                        onAdd(contactNameInput, contactPhoneNumberInput, contactRelationshipInput)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary)

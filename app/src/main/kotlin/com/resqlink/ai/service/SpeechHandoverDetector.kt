@@ -10,26 +10,44 @@ import android.util.Log
 import kotlinx.coroutines.*
 import java.util.Locale
 
+/**
+ * # SpeechHandoverDetector
+ *
+ * Monitors the microphone during an ongoing automated 911 call to detect when
+ * an unconscious or injured patient regains consciousness and begins speaking.
+ *
+ * Ordinary Human Overview:
+ * Imagine a car crash where the driver is knocked unconscious. ResQLink AI initiates
+ * a 911 call and talks to the operator on speakerphone.
+ *
+ * If the driver suddenly wakes up and groans "Tulong!" or "Hello?", the AI must:
+ * 1. Instantly recognize that human speech is occurring.
+ * 2. Immediately shut off automated AI voice responses.
+ * 3. Hand over the microphone and speakerphone directly to the patient.
+ *
+ * This detector discriminates coherent human words from background vehicle/road noise.
+ */
 class SpeechHandoverDetector(
     private val context: Context,
     private val onClearSpeechDetected: (spokenWords: String) -> Unit
 ) {
 
-    private var speechRecognizer: SpeechRecognizer? = null
-    private var isListening = false
-    private var isDestroyed = false
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private var systemSpeechRecognizer: SpeechRecognizer? = null
+    private var isActivelyListening: Boolean = false
+    private var isDetectorDestroyed: Boolean = false
+    private val mainCoroutineScope = CoroutineScope(Dispatchers.Main + Job())
 
     init {
-        initRecognizer()
+        initializeSpeechRecognizer()
     }
 
-    private fun initRecognizer() {
+    private fun initializeSpeechRecognizer() {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             Log.w("SpeechHandoverDetector", "Speech recognition is not available on this device")
             return
         }
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+
+        systemSpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
             setRecognitionListener(object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
@@ -37,29 +55,29 @@ class SpeechHandoverDetector(
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
 
-                override fun onError(error: Int) {
-                    if (isDestroyed || !isListening) return
+                override fun onError(errorCode: Int) {
+                    if (isDetectorDestroyed || !isActivelyListening) return
                     // Re-arm listener after brief delay for continuous accident monitoring
-                    scope.launch {
+                    mainCoroutineScope.launch {
                         delay(500L)
-                        if (isListening && !isDestroyed) {
+                        if (isActivelyListening && !isDetectorDestroyed) {
                             startListeningInternal()
                         }
                     }
                 }
 
                 override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val spoken = matches?.firstOrNull()?.trim() ?: ""
-                    Log.d("SpeechHandoverDetector", "Heard speech candidate: '$spoken'")
+                    val candidateSpeechMatches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val topSpokenCandidate = candidateSpeechMatches?.firstOrNull()?.trim() ?: ""
+                    Log.d("SpeechHandoverDetector", "Heard speech candidate: '$topSpokenCandidate'")
 
-                    if (isValidPatientSpeech(spoken)) {
-                        Log.i("SpeechHandoverDetector", "Valid coherent patient speech confirmed: '$spoken'")
+                    if (isValidPatientSpeech(topSpokenCandidate)) {
+                        Log.i("SpeechHandoverDetector", "Valid coherent patient speech confirmed: '$topSpokenCandidate'")
                         stopListening()
-                        onClearSpeechDetected(spoken)
-                    } else if (isListening && !isDestroyed) {
+                        onClearSpeechDetected(topSpokenCandidate)
+                    } else if (isActivelyListening && !isDetectorDestroyed) {
                         // Keep listening
-                        scope.launch {
+                        mainCoroutineScope.launch {
                             delay(300L)
                             startListeningInternal()
                         }
@@ -67,12 +85,12 @@ class SpeechHandoverDetector(
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val partial = matches?.firstOrNull()?.trim() ?: ""
-                    if (isValidPatientSpeech(partial)) {
-                        Log.i("SpeechHandoverDetector", "Partial coherent speech detected: '$partial'")
+                    val partialSpeechMatches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val topPartialCandidate = partialSpeechMatches?.firstOrNull()?.trim() ?: ""
+                    if (isValidPatientSpeech(topPartialCandidate)) {
+                        Log.i("SpeechHandoverDetector", "Partial coherent speech detected: '$topPartialCandidate'")
                         stopListening()
-                        onClearSpeechDetected(partial)
+                        onClearSpeechDetected(topPartialCandidate)
                     }
                 }
 
@@ -87,53 +105,62 @@ class SpeechHandoverDetector(
      */
     private fun isValidPatientSpeech(text: String): Boolean {
         if (text.isBlank()) return false
-        val words = text.split("\\s+".toRegex()).filter { it.isNotBlank() }
+        val spokenWordsList = text.split("\\s+".toRegex()).filter { it.isNotBlank() }
 
         // High priority single words signaling consciousness
         val consciousSignals = setOf(
-            "tulong", "help", "hello", "opo", "oo", "nandito", "nasugatan", 
+            "tulong", "help", "hello", "opo", "oo", "nandito", "nasugatan",
             "aray", "sino", "yes", "here", "can", "hear", "buhay", "resqlink"
         )
 
-        val containsSignal = words.any { it.lowercase(Locale.ROOT) in consciousSignals }
-        return words.size >= 2 || containsSignal
+        val containsConsciousSignal = spokenWordsList.any { word -> word.lowercase(Locale.ROOT) in consciousSignals }
+        return spokenWordsList.size >= 2 || containsConsciousSignal
     }
 
+    /**
+     * Starts listening for patient voice activity.
+     */
     fun startListening() {
-        if (isListening || isDestroyed) return
-        isListening = true
+        if (isActivelyListening || isDetectorDestroyed) return
+        isActivelyListening = true
         startListeningInternal()
     }
 
     private fun startListeningInternal() {
         try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            val speechRecognitionIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-PH")
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             }
-            speechRecognizer?.startListening(intent)
-        } catch (e: Exception) {
-            Log.e("SpeechHandoverDetector", "Error starting listening: ${e.message}")
+            systemSpeechRecognizer?.startListening(speechRecognitionIntent)
+        } catch (exception: Exception) {
+            Log.e("SpeechHandoverDetector", "Error starting listening: ${exception.message}")
         }
     }
 
+    /**
+     * Halts speech recognition.
+     */
     fun stopListening() {
-        isListening = false
+        isActivelyListening = false
         try {
-            speechRecognizer?.stopListening()
-            speechRecognizer?.cancel()
-        } catch (e: Exception) {
-            Log.e("SpeechHandoverDetector", "Error stopping listening: ${e.message}")
+            systemSpeechRecognizer?.stopListening()
+            systemSpeechRecognizer?.cancel()
+        } catch (exception: Exception) {
+            Log.e("SpeechHandoverDetector", "Error stopping listening: ${exception.message}")
         }
     }
 
+    /**
+     * Releases speech recognition and coroutine resources.
+     */
     fun destroy() {
-        isDestroyed = true
+        isDetectorDestroyed = true
         stopListening()
-        scope.cancel()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        mainCoroutineScope.cancel()
+        systemSpeechRecognizer?.destroy()
+        systemSpeechRecognizer = null
     }
 }

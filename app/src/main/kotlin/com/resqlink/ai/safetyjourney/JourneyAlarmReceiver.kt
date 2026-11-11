@@ -11,20 +11,34 @@ import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.resqlink.ai.MainActivity
-import com.resqlink.ai.R
 import com.resqlink.ai.data.local.HotlineDatabaseHelper
 import com.resqlink.ai.data.location.LocationProvider
 import com.resqlink.ai.data.telephony.SmsDispatcher
 import com.resqlink.ai.emergency.EmergencyEventManager
 import com.resqlink.ai.emergency.EmergencyTriggerSource
-import com.resqlink.ai.emergency.IncidentLifecycleState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Handles Safety Journey timer alarms and user interactive actions from notification buttons.
- * Guarantees that missed check-in escalations notify trusted contacts ONLY and never auto-dial 911.
+ * # JourneyAlarmReceiver
+ *
+ * BroadcastReceiver responsible for waking the application when a Safety Journey deadline arrives.
+ *
+ * Ordinary Human Overview:
+ * When you walk home at night and set a 20-minute safety timer, this receiver is the digital safety net:
+ * 1. **At the Deadline**: It fires a loud, vibrating heads-up notification asking: "Are you safe?"
+ * 2. **Notification Actions**: Directly from the lock screen, you can tap:
+ *    - "I'M SAFE" -> Cancels alarms and completes the trip safely.
+ *    - "+15 MINS" -> Extends your journey if stuck in traffic or a bus delay.
+ *    - "EMERGENCY SOS" -> Immediately launches full emergency assistance.
+ * 3. **Grace Period Expiration**: If you do not tap anything and the grace period runs out,
+ *    it automatically retrieves your last known GPS coordinates and sends an urgent SMS
+ *    to your designated family/trusted contacts.
+ *
+ * Safety-Critical Architecture Guarantee:
+ * A missed check-in NEVER automatically calls 911 or public emergency dispatch.
+ * It alerts trusted family contacts ONLY, preventing accidental false 911 dispatch.
  */
 class JourneyAlarmReceiver : BroadcastReceiver() {
 
@@ -36,64 +50,65 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
         const val ACTION_EMERGENCY_SOS = "com.resqlink.ai.action.JOURNEY_EMERGENCY_SOS"
 
         const val EXTRA_JOURNEY_ID = "extra_journey_id"
-        private const val NOTIFICATION_ID = 9021
-        private const val CHANNEL_ID = "safety_journey_channel"
+        private const val JOURNEY_NOTIFICATION_ID = 9021
+        private const val NOTIFICATION_CHANNEL_ID = "safety_journey_channel"
+        private const val NOTIFICATION_CHANNEL_NAME = "Safety Journey Check-in"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        val repo = SafetyJourneyRepository.getInstance(context)
-        val scheduler = JourneyScheduler(context)
-        val currentJourney = repo.activeJourney.value
+        val journeyRepository = SafetyJourneyRepository.getInstance(context)
+        val journeyScheduler = JourneyScheduler(context)
+        val currentActiveJourney = journeyRepository.activeJourney.value
 
         when (intent.action) {
             ACTION_CHECK_IN_REMINDER -> {
-                if (currentJourney != null && currentJourney.status == JourneyStatus.ACTIVE) {
-                    val updated = currentJourney.copy(status = JourneyStatus.GRACE_PERIOD)
-                    repo.saveActiveJourney(updated)
+                if (currentActiveJourney != null && currentActiveJourney.status == JourneyStatus.ACTIVE) {
+                    val updatedJourney = currentActiveJourney.copy(status = JourneyStatus.GRACE_PERIOD)
+                    journeyRepository.saveActiveJourney(updatedJourney)
 
-                    // Post high-priority check-in reminder
-                    showCheckInNotification(context, updated)
+                    // Post high-priority check-in reminder on lock screen
+                    displayCheckInNotification(context, updatedJourney)
 
-                    // Schedule grace-period escalation alarm
-                    scheduler.scheduleGraceAlarm(updated)
+                    // Program grace-period countdown alarm
+                    journeyScheduler.scheduleGraceAlarm(updatedJourney)
                 }
             }
 
             ACTION_GRACE_EXPIRED -> {
-                if (currentJourney != null && currentJourney.status == JourneyStatus.GRACE_PERIOD) {
-                    // Grace period expired without check-in -> ESCALATE TO TRUSTED CONTACTS
-                    dismissNotification(context)
+                if (currentActiveJourney != null && currentActiveJourney.status == JourneyStatus.GRACE_PERIOD) {
+                    // Grace window elapsed without user response -> Escalate to trusted ICE contacts
+                    cancelNotification(context)
 
-                    val escalated = currentJourney.copy(
+                    val escalatedJourney = currentActiveJourney.copy(
                         status = JourneyStatus.ESCALATED_CONTACTS,
                         escalationReason = "Safety journey deadline exceeded without user check-in."
                     )
-                    repo.archiveJourney(escalated)
+                    journeyRepository.archiveJourney(escalatedJourney)
 
-                    performContactEscalation(context, escalated)
+                    escalateToTrustedContacts(context, escalatedJourney)
                 }
             }
 
             ACTION_CHECK_IN_SAFE -> {
-                dismissNotification(context)
-                scheduler.cancelAllAlarms()
-                if (currentJourney != null) {
-                    val resolved = currentJourney.copy(
+                cancelNotification(context)
+                journeyScheduler.cancelAllAlarms()
+                if (currentActiveJourney != null) {
+                    val resolvedJourney = currentActiveJourney.copy(
                         status = JourneyStatus.RESOLVED_SAFE,
                         completedTimeMillis = System.currentTimeMillis()
                     )
-                    repo.archiveJourney(resolved)
+                    journeyRepository.archiveJourney(resolvedJourney)
                 }
             }
 
             ACTION_EXTEND_15M -> {
-                dismissNotification(context)
-                scheduler.extendJourney(15)
+                cancelNotification(context)
+                journeyScheduler.extendJourney(15)
             }
 
             ACTION_EMERGENCY_SOS -> {
-                dismissNotification(context)
-                scheduler.cancelAllAlarms()
+                cancelNotification(context)
+                journeyScheduler.cancelAllAlarms()
                 EmergencyEventManager.getInstance().registerTrigger(
                     source = EmergencyTriggerSource.MANUAL_SOS_BUTTON,
                     detectedPhrase = "Safety Journey SOS button pressed"
@@ -102,13 +117,16 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun showCheckInNotification(context: Context, journey: SafetyJourney) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    /**
+     * Builds and displays a high-priority, ongoing notification with action buttons.
+     */
+    private fun displayCheckInNotification(context: Context, journey: SafetyJourney) {
+        val systemNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Safety Journey Check-in",
+            val notificationChannel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                NOTIFICATION_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Reminders and urgent check-ins for active safety sessions"
@@ -122,11 +140,11 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
                         .build()
                 )
             }
-            notificationManager.createNotificationChannel(channel)
+            systemNotificationManager.createNotificationChannel(notificationChannel)
         }
 
         // Tap content intent -> opens MainActivity
-        val contentIntent = PendingIntent.getActivity(
+        val contentPendingIntent = PendingIntent.getActivity(
             context,
             0,
             Intent(context, MainActivity::class.java).apply {
@@ -135,8 +153,8 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Safe Action
-        val safeIntent = PendingIntent.getBroadcast(
+        // Action: I'm Safe
+        val safePendingIntent = PendingIntent.getBroadcast(
             context,
             1,
             Intent(context, JourneyAlarmReceiver::class.java).apply {
@@ -146,8 +164,8 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Extend Action
-        val extendIntent = PendingIntent.getBroadcast(
+        // Action: Extend 15 Minutes
+        val extendPendingIntent = PendingIntent.getBroadcast(
             context,
             2,
             Intent(context, JourneyAlarmReceiver::class.java).apply {
@@ -157,8 +175,8 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Emergency SOS Action
-        val emergencyIntent = PendingIntent.getBroadcast(
+        // Action: Trigger SOS
+        val emergencyPendingIntent = PendingIntent.getBroadcast(
             context,
             3,
             Intent(context, JourneyAlarmReceiver::class.java).apply {
@@ -168,7 +186,7 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val checkInNotification = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("Are you safe? Check-in Overdue")
             .setContentText("Destination: ${journey.destination}. Tap 'I'm Safe' or journey will escalate in ${journey.gracePeriodMinutes} mins.")
@@ -176,52 +194,55 @@ class JourneyAlarmReceiver : BroadcastReceiver() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(false)
             .setOngoing(true)
-            .setContentIntent(contentIntent)
-            .addAction(android.R.drawable.checkbox_on_background, "I'M SAFE", safeIntent)
-            .addAction(android.R.drawable.ic_menu_recent_history, "+15 MINS", extendIntent)
-            .addAction(android.R.drawable.ic_delete, "EMERGENCY SOS", emergencyIntent)
+            .setContentIntent(contentPendingIntent)
+            .addAction(android.R.drawable.checkbox_on_background, "I'M SAFE", safePendingIntent)
+            .addAction(android.R.drawable.ic_menu_recent_history, "+15 MINS", extendPendingIntent)
+            .addAction(android.R.drawable.ic_delete, "EMERGENCY SOS", emergencyPendingIntent)
             .build()
 
-        notificationManager.notify(NOTIFICATION_ID, notification)
+        systemNotificationManager.notify(JOURNEY_NOTIFICATION_ID, checkInNotification)
     }
 
-    private fun dismissNotification(context: Context) {
-        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.cancel(NOTIFICATION_ID)
+    private fun cancelNotification(context: Context) {
+        val systemNotificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        systemNotificationManager.cancel(JOURNEY_NOTIFICATION_ID)
     }
 
-    private fun performContactEscalation(context: Context, journey: SafetyJourney) {
-        val scope = CoroutineScope(Dispatchers.IO)
-        scope.launch {
+    /**
+     * Executes background SMS notification to authorized family contacts with last known GPS location.
+     */
+    private fun escalateToTrustedContacts(context: Context, journey: SafetyJourney) {
+        val backgroundScope = CoroutineScope(Dispatchers.IO)
+        backgroundScope.launch {
             val locationProvider = LocationProvider(context)
             val smsDispatcher = SmsDispatcher(context)
-            val dbHelper = HotlineDatabaseHelper(context)
-            val contacts = dbHelper.getTrustedContacts().filter { it.isAuthorizedForSafetyCheck }
+            val databaseHelper = HotlineDatabaseHelper(context)
+            val authorizedContacts = databaseHelper.getTrustedContacts().filter { it.isAuthorizedForSafetyCheck }
 
-            val location = locationProvider.getCurrentOrCachedLocation()
+            val currentLocationSnapshot = locationProvider.getCurrentOrCachedLocation()
 
-            // Register incident in event manager
-            val (incident, _) = EmergencyEventManager.getInstance().registerTrigger(
+            // Record incident in central event manager
+            val (incidentRecord, _) = EmergencyEventManager.getInstance().registerTrigger(
                 source = EmergencyTriggerSource.SAFETY_JOURNEY_DEADLINE,
                 detectedPhrase = "Missed check-in for destination: ${journey.destination}",
-                location = location
+                location = currentLocationSnapshot
             )
 
-            // Send SMS to trusted contacts ONLY (Never call 911)
-            var sent = 0
-            if (contacts.isNotEmpty()) {
-                sent = smsDispatcher.dispatchUnresponsiveAlerts(
-                    contacts = contacts,
-                    location = location,
+            // Send emergency SMS alerts to family contacts (never auto-call 911)
+            var successfullySentSmsCount = 0
+            if (authorizedContacts.isNotEmpty()) {
+                successfullySentSmsCount = smsDispatcher.dispatchUnresponsiveAlerts(
+                    contacts = authorizedContacts,
+                    location = currentLocationSnapshot,
                     nearestHotline = null,
                     userName = "Safety Journey User (${journey.destination})"
                 )
             }
 
             EmergencyEventManager.getInstance().recordContactAlertResult(
-                incidentId = incident.incidentId,
-                attempted = contacts.size,
-                sent = sent
+                incidentId = incidentRecord.incidentId,
+                attempted = authorizedContacts.size,
+                sent = successfullySentSmsCount
             )
         }
     }

@@ -6,7 +6,32 @@ import com.resqlink.ai.emergency.IncidentLifecycleState
 import com.resqlink.ai.rescuecard.RescueProfile
 
 /**
- * UI State exposed to First Responders or Good Samaritans assisting the user.
+ * # ResponderHotline
+ *
+ * An emergency telephone number displayed on the Responder Assistance screen.
+ *
+ * @property number The telephone short-code or landline (e.g. "911", "143").
+ * @property name The official institution name (e.g. "Philippine Red Cross").
+ * @property description A brief explanation of the agency's primary capabilities.
+ */
+data class ResponderHotline(
+    val number: String,
+    val name: String,
+    val description: String
+)
+
+/**
+ * # ResponderState
+ *
+ * The high-contrast, privacy-sanitized emergency information displayed when a first responder
+ * (paramedic, police officer, or Good Samaritan) picks up the phone during an active crisis.
+ *
+ * Ordinary Human Overview:
+ * If an unconscious person is found on the road, a rescuer can look at the phone screen to see:
+ * 1. How long ago the incident happened (elapsed minutes and seconds).
+ * 2. Crucial medical data (blood type, life-threatening allergies, emergency instructions).
+ * 3. 1-tap call buttons for the user's family and official national hotlines.
+ * 4. An offline QR code that paramedics can scan to import medical history into their tablet.
  */
 data class ResponderState(
     val activeIncidentId: String? = null,
@@ -31,10 +56,4 @@ data class ResponderState(
         ResponderHotline("143", "Philippine Red Cross", "Ambulance, blood, rescue & relief"),
         ResponderHotline("165-02", "DPWH Emergency Road Patrol", "Road obstructions, disasters & hazards")
     )
-)
-
-data class ResponderHotline(
-    val number: String,
-    val name: String,
-    val description: String
 )

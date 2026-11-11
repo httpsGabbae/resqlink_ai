@@ -1,12 +1,25 @@
 package com.resqlink.ai.rescuecard
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 /**
- * Offline Emergency Medical Profile (Rescue Card) with granular privacy and visibility controls.
- * Users control which fields are exposed to bystanders and first responders during an active emergency.
+ * # RescueProfile
+ *
+ * Offline Emergency Medical Profile ("Rescue Card") with granular privacy and visibility controls.
+ *
+ * Ordinary Human Overview:
+ * If a person is found unconscious in an accident, first responders (paramedics, ER doctors)
+ * need critical medical information immediately:
+ * - Blood Type (e.g., O+, A-, etc.)
+ * - Severe Allergies (e.g., Penicillin, Peanuts)
+ * - Chronic Conditions (e.g., Asthma, Diabetes, Epilepsy)
+ * - In-Case-of-Emergency (ICE) family phone numbers
+ *
+ * Privacy Architecture:
+ * ResQLink AI never forces users to expose their private health records. Every single field
+ * has an independent visibility toggle ([isBloodTypeVisible], [isAllergiesVisible], etc.).
+ * When displaying the Rescue Card or generating an offline QR code, ONLY fields explicitly
+ * approved by the user are included.
  */
 @Serializable
 data class RescueProfile(
@@ -24,8 +37,8 @@ data class RescueProfile(
     val secondaryContactName: String = "",
     val secondaryContactPhone: String = "",
     val secondaryContactRelation: String = "",
-    
-    // Granular visibility opt-in flags for responders
+
+    // Granular visibility opt-in toggles for bystanders and emergency responders
     val isBloodTypeVisible: Boolean = true,
     val isAllergiesVisible: Boolean = true,
     val isMedicationsVisible: Boolean = true,
@@ -39,26 +52,26 @@ data class RescueProfile(
      * fields explicitly permitted by the user's visibility preferences.
      */
     fun toSanitizedEmergencySummary(): String {
-        val sb = StringBuilder()
-        sb.appendLine("=== RESQLINK RESCUE CARD ===")
-        sb.appendLine("Name: $fullName")
-        if (birthYearOrAge.isNotBlank()) sb.appendLine("Age/Birth: $birthYearOrAge")
-        if (isBloodTypeVisible && bloodType.isNotBlank()) sb.appendLine("Blood Type: $bloodType")
-        if (isAllergiesVisible && allergies.isNotBlank()) sb.appendLine("Allergies: $allergies")
-        if (isConditionsVisible && medicalConditions.isNotBlank()) sb.appendLine("Conditions: $medicalConditions")
-        if (isMedicationsVisible && medications.isNotBlank()) sb.appendLine("Medications: $medications")
-        if (isInstructionsVisible && emergencyInstructions.isNotBlank()) sb.appendLine("Emergency Notes: $emergencyInstructions")
-        if (isOrganDonorVisible) sb.appendLine("Organ Donor: ${if (isOrganDonor) "YES" else "NO"}")
+        val summaryBuilder = StringBuilder()
+        summaryBuilder.appendLine("=== RESQLINK RESCUE CARD ===")
+        summaryBuilder.appendLine("Name: $fullName")
+        if (birthYearOrAge.isNotBlank()) summaryBuilder.appendLine("Age/Birth: $birthYearOrAge")
+        if (isBloodTypeVisible && bloodType.isNotBlank()) summaryBuilder.appendLine("Blood Type: $bloodType")
+        if (isAllergiesVisible && allergies.isNotBlank()) summaryBuilder.appendLine("Allergies: $allergies")
+        if (isConditionsVisible && medicalConditions.isNotBlank()) summaryBuilder.appendLine("Conditions: $medicalConditions")
+        if (isMedicationsVisible && medications.isNotBlank()) summaryBuilder.appendLine("Medications: $medications")
+        if (isInstructionsVisible && emergencyInstructions.isNotBlank()) summaryBuilder.appendLine("Emergency Notes: $emergencyInstructions")
+        if (isOrganDonorVisible) summaryBuilder.appendLine("Organ Donor: ${if (isOrganDonor) "YES" else "NO"}")
         if (isContactsVisible) {
-            sb.appendLine("Emergency Contacts:")
+            summaryBuilder.appendLine("Emergency Contacts:")
             if (primaryContactPhone.isNotBlank()) {
-                sb.appendLine(" - $primaryContactName ($primaryContactRelation): $primaryContactPhone")
+                summaryBuilder.appendLine(" - $primaryContactName ($primaryContactRelation): $primaryContactPhone")
             }
             if (secondaryContactPhone.isNotBlank()) {
-                sb.appendLine(" - $secondaryContactName ($secondaryContactRelation): $secondaryContactPhone")
+                summaryBuilder.appendLine(" - $secondaryContactName ($secondaryContactRelation): $secondaryContactPhone")
             }
         }
-        return sb.toString().trim()
+        return summaryBuilder.toString().trim()
     }
 
     /**
@@ -79,6 +92,6 @@ data class RescueProfile(
             if (isContactsVisible && secondaryContactPhone.isNotBlank()) {
                 put("ice2", "$secondaryContactName:$secondaryContactPhone")
             }
-        }.entries.joinToString(";") { "${it.key}=${it.value}" }
+        }.entries.joinToString(";") { keyValuePair -> "${keyValuePair.key}=${keyValuePair.value}" }
     }
 }

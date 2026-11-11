@@ -25,6 +25,24 @@ import androidx.compose.ui.unit.sp
 import com.resqlink.ai.R
 import com.resqlink.ai.ui.emergency.*
 
+/**
+ * =========================================================================================
+ * LOGIN & AUTHENTICATION SCREEN
+ * =========================================================================================
+ * Educational Overview:
+ * In emergency and safety-critical software, user authentication must never impede rescue:
+ *
+ * 1. ZERO-LOCKOUT EMERGENCY FAST-PASS:
+ *    If an emergency occurs while a user is signed out, they must not be blocked by an
+ *    authentication wall. The "Emergency Fast-Pass (Skip Login)" button allows instant access
+ *    to SOS functions, local hotlines, and offline medical profile cards immediately.
+ *
+ * 2. PERMANENT OFFLINE SESSION:
+ *    Signing in with Google persists session state locally in SharedPreferences. The app
+ *    remains permanently authenticated offline, so an internet outage or expired token
+ *    never disables emergency monitoring or background guardian services.
+ * =========================================================================================
+ */
 @Composable
 fun LoginScreen(
     onGoogleSignInClick: () -> Unit,
@@ -38,12 +56,11 @@ fun LoginScreen(
             .padding(24.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Spacing & Logo Header
+            // Top Section: App Brand, Logo, and Core Capability Highlights
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(top = 36.dp)
@@ -97,14 +114,14 @@ fun LoginScreen(
                 }
             }
 
-            // Bottom Action Section (Google Sign In & Guest Mode)
+            // Bottom Action Section: Google Sign-in & Fast-Pass Guest Mode
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 24.dp)
             ) {
-                // Primary: Google Sign In Button
+                // Primary Action: Google Sign In Button
                 Button(
                     onClick = onGoogleSignInClick,
                     shape = RoundedCornerShape(14.dp),
@@ -117,7 +134,6 @@ fun LoginScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        // Google 'G' Icon stylized
                         Surface(
                             shape = CircleShape,
                             color = Color(0xFF4285F4),
@@ -146,7 +162,7 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Secondary: Emergency Fast-Pass / Guest Mode
+                // Secondary Action: Emergency Fast-Pass / Guest Mode
                 OutlinedButton(
                     onClick = onGuestClick,
                     shape = RoundedCornerShape(14.dp),
@@ -185,8 +201,11 @@ fun LoginScreen(
     }
 }
 
+/**
+ * Bulleted feature row with a checkmark badge.
+ */
 @Composable
-private fun FeatureRow(text: String) {
+private fun FeatureRow(descriptionText: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = Icons.Default.CheckCircle,
@@ -196,7 +215,7 @@ private fun FeatureRow(text: String) {
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-            text = text,
+            text = descriptionText,
             color = TextPearl,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium

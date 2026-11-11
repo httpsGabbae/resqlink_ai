@@ -7,21 +7,67 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 
+/**
+ * # DistressKeyword
+ *
+ * Vocabulary of recognized spoken words supported by the acoustic spotting engine.
+ *
+ * @property label Clean textual name of the keyword.
+ * @property isEmergency True if hearing this word constitutes an emergency distress call.
+ */
 enum class DistressKeyword(val label: String, val isEmergency: Boolean) {
+    /** Filipino primary distress cry ("Tulong!" / "Help!"). */
     TULONG("Tulong", true),
+
+    /** Filipino urgent distress cry ("Saklolo!" / "Rescue!"). */
     SAKLOLO("Saklolo", true),
+
+    /** English universal distress cry ("Help!"). */
     HELP("Help", true),
+
+    /** Universal emergency indicator ("Emergency!"). */
     EMERGENCY("Emergency", true),
+
+    /** Spoken cancellation word to abort a pending false alarm ("Cancel!"). */
     CANCEL("Cancel", false),
+
+    /** Unrecognized human speech or words that are not emergency keywords. */
     UNKNOWN("Unknown", false),
+
+    /** Silence, ambient static, or background noise. */
     SILENCE("Silence", false)
 }
 
+/**
+ * # SpotterResult
+ *
+ * Holds the output of a single keyword recognition evaluation.
+ *
+ * @property keyword The classified word category.
+ * @property confidence Neural network probability score between 0.0 (0%) and 1.0 (100%).
+ */
 data class SpotterResult(
     val keyword: DistressKeyword,
     val confidence: Float
 )
 
+/**
+ * # KeywordSpotter
+ *
+ * Stage 2 of the audio distress pipeline.
+ *
+ * Ordinary Human Overview:
+ * When the [VadDetector] detects speech energy, this class evaluates the 1.0-second
+ * audio recording using an on-device TensorFlow Lite (`kws_ph.tflite`) neural network model:
+ * 1. It normalizes 16,000 raw microphone numbers into decimal values between -1.0 and 1.0.
+ * 2. It feeds the audio into the machine learning model.
+ * 3. The model outputs a probability score for each keyword.
+ * 4. If the confidence is high, the app triggers the emergency countdown.
+ *
+ * Safety Requirement:
+ * Loud yelling, screaming, or sudden bangs alone MUST NEVER trigger an emergency.
+ * The system strictly requires an articulated distress keyword ("Tulong", "Saklolo", "Help").
+ */
 class KeywordSpotter(private val context: Context) {
 
     private var tfliteInterpreter: Interpreter? = null
@@ -31,6 +77,9 @@ class KeywordSpotter(private val context: Context) {
         loadModelIfAvailable()
     }
 
+    /**
+     * Attempts to map and load the on-device TensorFlow Lite model file from app assets.
+     */
     private fun loadModelIfAvailable() {
         try {
             val assetFileDescriptor = context.assets.openFd(modelAssetPath)
@@ -38,58 +87,81 @@ class KeywordSpotter(private val context: Context) {
             val fileChannel = inputStream.channel
             val startOffset = assetFileDescriptor.startOffset
             val declaredLength = assetFileDescriptor.declaredLength
-            val buffer: ByteBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
-            
-            val options = Interpreter.Options().apply {
-                setNumThreads(2)
+            val modelMemoryBuffer: ByteBuffer = fileChannel.map(
+                FileChannel.MapMode.READ_ONLY,
+                startOffset,
+                declaredLength
+            )
+
+            val interpreterOptions = Interpreter.Options().apply {
+                setNumThreads(2) // Utilize 2 CPU cores for fast parallel mathematical matrix math
             }
-            tfliteInterpreter = Interpreter(buffer, options)
-        } catch (e: Exception) {
-            // Model file not yet bundled or falling back to acoustic energy classifier
+            tfliteInterpreter = Interpreter(modelMemoryBuffer, interpreterOptions)
+        } catch (loadException: Exception) {
+            // Model file not yet bundled or falling back to linguistic speech recognizer
             tfliteInterpreter = null
         }
     }
 
     /**
-     * Evaluates a 1-second rolling 16kHz audio buffer (16,000 shorts).
+     * Evaluates a 1-second rolling 16kHz audio buffer (16,000 PCM numbers).
+     *
+     * @param rollingPcmBuffer The raw 16-bit audio samples from the microphone.
+     * @return [SpotterResult] indicating the detected keyword and confidence score.
      */
     fun classifyAudio(rollingPcmBuffer: ShortArray): SpotterResult {
-        val interpreter = tfliteInterpreter
-        if (interpreter != null) {
-            return runTFLiteInference(interpreter, rollingPcmBuffer)
+        val activeInterpreter = tfliteInterpreter
+        if (activeInterpreter != null) {
+            return runTensorFlowLiteInference(activeInterpreter, rollingPcmBuffer)
         }
 
-        // Shouting, screaming, or loud ambient noises alone MUST NEVER trigger an emergency.
-        // The AI is strictly trained to require the voice keyword "Resqlink Tulong!" or super-distress "Tulong!".
-        // Continuous linguistic keyword spotting is handled accurately by GuardianSpeechRecognizer.
+        // Failsafe: When running without the optional local TFLite binary,
+        // speech recognition is handled accurately by the Android SpeechRecognizer service.
         return SpotterResult(DistressKeyword.SILENCE, 0.0f)
     }
 
-    private fun runTFLiteInference(interpreter: Interpreter, pcmBuffer: ShortArray): SpotterResult {
+    /**
+     * Closes the TensorFlow Lite interpreter and releases native C++ memory resources.
+     */
+    fun close() {
+        tfliteInterpreter?.close()
+        tfliteInterpreter = null
+    }
+
+    /**
+     * Feeds the normalized audio into the TensorFlow Lite interpreter and parses probability scores.
+     */
+    private fun runTensorFlowLiteInference(
+        interpreter: Interpreter,
+        pcmBuffer: ShortArray
+    ): SpotterResult {
         try {
-            val inputBuffer = ByteBuffer.allocateDirect(pcmBuffer.size * 4).apply {
+            // 1. Allocate a direct byte buffer: 16,000 samples * 4 bytes per 32-bit float
+            val inputByteBuffer = ByteBuffer.allocateDirect(pcmBuffer.size * 4).apply {
                 order(ByteOrder.nativeOrder())
-                for (s in pcmBuffer) {
-                    putFloat(s / 32768.0f) // Normalized audio [-1.0, 1.0]
+                for (audioSample in pcmBuffer) {
+                    // Normalize 16-bit integer [-32768, 32767] into floating point [-1.0, 1.0]
+                    putFloat(audioSample / 32768.0f)
                 }
                 rewind()
             }
 
-            // Output array: [1, num_classes] (e.g. 7 classes)
-            val outputScores = Array(1) { FloatArray(7) }
-            interpreter.run(inputBuffer, outputScores)
+            // 2. Output tensor: [1 batch, 7 keyword classes]
+            val outputProbabilities = Array(1) { FloatArray(7) }
+            interpreter.run(inputByteBuffer, outputProbabilities)
 
-            val scores = outputScores[0]
-            var maxIndex = 0
-            var maxScore = 0f
-            for (i in scores.indices) {
-                if (scores[i] > maxScore) {
-                    maxScore = scores[i]
-                    maxIndex = i
+            // 3. Find the highest probability class (ArgMax)
+            val classScores = outputProbabilities[0]
+            var highestScoreIndex = 0
+            var highestConfidenceScore = 0f
+            for (classIndex in classScores.indices) {
+                if (classScores[classIndex] > highestConfidenceScore) {
+                    highestConfidenceScore = classScores[classIndex]
+                    highestScoreIndex = classIndex
                 }
             }
 
-            val keyword = when (maxIndex) {
+            val classifiedKeyword = when (highestScoreIndex) {
                 0 -> DistressKeyword.SILENCE
                 1 -> DistressKeyword.UNKNOWN
                 2 -> DistressKeyword.TULONG
@@ -100,14 +172,9 @@ class KeywordSpotter(private val context: Context) {
                 else -> DistressKeyword.UNKNOWN
             }
 
-            return SpotterResult(keyword, maxScore)
-        } catch (e: Exception) {
+            return SpotterResult(classifiedKeyword, highestConfidenceScore)
+        } catch (inferenceException: Exception) {
             return SpotterResult(DistressKeyword.UNKNOWN, 0f)
         }
-    }
-
-    fun close() {
-        tfliteInterpreter?.close()
-        tfliteInterpreter = null
     }
 }

@@ -10,20 +10,23 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.resqlink.ai.data.local.HotlineDatabaseHelper
+import com.resqlink.ai.data.local.SessionManager
 import com.resqlink.ai.data.location.LocationProvider
 import com.resqlink.ai.data.repository.EmergencyRepositoryImpl
 import com.resqlink.ai.data.telephony.CallManager
+import com.resqlink.ai.data.telephony.DetectedSim
 import com.resqlink.ai.data.telephony.SmsDispatcher
+import com.resqlink.ai.domain.model.CallPriority
 import com.resqlink.ai.domain.model.EmergencyState
 import com.resqlink.ai.domain.model.Hotline
 import com.resqlink.ai.domain.model.LocationSnapshot
+import com.resqlink.ai.domain.model.SimPreference
 import com.resqlink.ai.domain.model.TrustedContact
 import com.resqlink.ai.emergency.EmergencyEventManager
-import com.resqlink.ai.emergency.EmergencyTriggerSource
-import com.resqlink.ai.emergency.IncidentLifecycleState
 import com.resqlink.ai.guides.EmergencyGuide
 import com.resqlink.ai.guides.EmergencyGuideRepository
 import com.resqlink.ai.guides.GuideCategory
@@ -33,87 +36,146 @@ import com.resqlink.ai.incidents.IncidentRecord
 import com.resqlink.ai.incidents.IncidentRepository
 import com.resqlink.ai.motion.MotionDistressDetector
 import com.resqlink.ai.readiness.DiagnosticItem
-import com.resqlink.ai.readiness.DiagnosticStatus
 import com.resqlink.ai.readiness.EmergencySimulationManager
 import com.resqlink.ai.readiness.ReadinessCheckManager
 import com.resqlink.ai.readiness.ReadinessReport
 import com.resqlink.ai.rescuecard.RescueCardRepository
 import com.resqlink.ai.rescuecard.RescueProfile
 import com.resqlink.ai.responder.ResponderCoordinator
-import com.resqlink.ai.responder.ResponderState
 import com.resqlink.ai.safetyjourney.JourneyScheduler
+import com.resqlink.ai.safetyjourney.JourneyStatus
 import com.resqlink.ai.safetyjourney.SafetyJourney
 import com.resqlink.ai.safetyjourney.SafetyJourneyRepository
+import com.resqlink.ai.service.CrashTelemetryProvider
+import com.resqlink.ai.service.DispatcherQuestionClassifier
+import com.resqlink.ai.service.DispatcherResponseSynthesizer
 import com.resqlink.ai.service.GuardianForegroundService
+import com.resqlink.ai.service.SpeechHandoverDetector
+import com.resqlink.ai.service.VoiceAssistManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * # EmergencyViewModel
+ *
+ * Central architecture coordinator and state holder powering ResQLink AI's UI screens.
+ *
+ * Ordinary Human Overview:
+ * When you press the big red SOS button, or when your phone hears "Resqlink Tulong!" in Guardian Mode,
+ * this ViewModel coordinates the entire response:
+ * 1. **Immediate Feedback**: Starts loud emergency sirens and continuous vibration to alert bystanders.
+ * 2. **10-Second Countdown**: Gives you a grace period to cancel accidental false alarms.
+ * 3. **GPS Location**: Fetches your real-time coordinates and matches the closest emergency hotlines within 5km.
+ * 4. **SMS Broadcast**: Sends multi-part SMS messages with Google Maps links to your authorized ICE contacts.
+ * 5. **Phone Dialing**: Launches emergency calls according to your SIM and Call Priority settings (Family first, 911, or Local DRRMO).
+ * 6. **In-Call Voice Assist**: If you are unresponsive, AI speaks directly to the 911 dispatcher on speakerphone.
+ */
 class EmergencyViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val context: Context get() = getApplication<Application>().applicationContext
+    private val applicationContext: Context get() = getApplication<Application>().applicationContext
 
-    private val dbHelper = HotlineDatabaseHelper(context)
-    private val repository = EmergencyRepositoryImpl(dbHelper)
-    private val locationProvider = LocationProvider(context)
-    private val callManager = CallManager(context)
-    private val smsDispatcher = SmsDispatcher(context)
-    private val sessionManager = com.resqlink.ai.data.local.SessionManager(context)
-    private val voiceAssistManager = com.resqlink.ai.service.VoiceAssistManager(context)
-    private val crashTelemetryProvider = com.resqlink.ai.service.CrashTelemetryProvider(context)
-    private val dispatcherClassifier = com.resqlink.ai.service.DispatcherQuestionClassifier()
-    private val responseSynthesizer = com.resqlink.ai.service.DispatcherResponseSynthesizer()
-    private var speechHandoverDetector: com.resqlink.ai.service.SpeechHandoverDetector? = null
+    // Core Data & Telephony Services
+    private val databaseHelper = HotlineDatabaseHelper(applicationContext)
+    private val emergencyRepository = EmergencyRepositoryImpl(databaseHelper)
+    private val locationProvider = LocationProvider(applicationContext)
+    private val callManager = CallManager(applicationContext)
+    private val smsDispatcher = SmsDispatcher(applicationContext)
+    private val sessionManager = SessionManager(applicationContext)
 
-    // --- Master Feature Expansion Components ---
+    // Voice Assist & Kinematics Subsystems
+    private val voiceAssistManager = VoiceAssistManager(applicationContext)
+    private val crashTelemetryProvider = CrashTelemetryProvider(applicationContext)
+    private val dispatcherQuestionClassifier = DispatcherQuestionClassifier()
+    private val dispatcherResponseSynthesizer = DispatcherResponseSynthesizer()
+    private var speechHandoverDetector: SpeechHandoverDetector? = null
+
+    // Master Feature Expansion Components
     val emergencyEventManager = EmergencyEventManager.getInstance()
     val activeIncident = emergencyEventManager.currentIncident
 
-    private val safetyJourneyRepo = SafetyJourneyRepository.getInstance(context)
-    val activeSafetyJourney = safetyJourneyRepo.activeJourney
-    val safetyJourneyHistory = safetyJourneyRepo.journeyHistory
-    private val journeyScheduler = JourneyScheduler(context)
+    private val safetyJourneyRepository = SafetyJourneyRepository.getInstance(applicationContext)
+    val activeSafetyJourney = safetyJourneyRepository.activeJourney
+    val safetyJourneyHistory = safetyJourneyRepository.journeyHistory
+    private val journeyScheduler = JourneyScheduler(applicationContext)
 
-    private val rescueCardRepo = RescueCardRepository.getInstance(context)
-    val rescueProfile = rescueCardRepo.profile
+    private val rescueCardRepository = RescueCardRepository.getInstance(applicationContext)
+    val rescueProfile = rescueCardRepository.profile
 
-    val readinessCheckManager = ReadinessCheckManager(context, dbHelper)
+    val readinessCheckManager = ReadinessCheckManager(applicationContext, databaseHelper)
     val simulationManager = EmergencySimulationManager(emergencyEventManager)
     val simulationState = simulationManager.simulationState
 
-    val responderCoordinator = ResponderCoordinator(context, viewModelScope)
+    val responderCoordinator = ResponderCoordinator(applicationContext, viewModelScope)
     val responderState = responderCoordinator.responderState
 
-    val incidentRepo = IncidentRepository.getInstance(context)
+    val incidentRepo = IncidentRepository.getInstance(applicationContext)
     val incidentRecords = incidentRepo.incidents
 
-    val motionDetector = MotionDistressDetector(context, viewModelScope)
+    val motionDetector = MotionDistressDetector(applicationContext, viewModelScope)
 
     val emergencyGuides = EmergencyGuideRepository.getAllGuides()
 
     val userProfile = sessionManager.userProfile
 
+    // Observable StateFlows for UI
+    private val _emergencyState = MutableStateFlow<EmergencyState>(EmergencyState.Idle)
+    val emergencyState = _emergencyState.asStateFlow()
+
+    private val _allHotlines = MutableStateFlow<List<Hotline>>(emptyList())
+    val allHotlines = _allHotlines.asStateFlow()
+
+    private val _trustedContacts = MutableStateFlow<List<TrustedContact>>(emptyList())
+    val trustedContacts = _trustedContacts.asStateFlow()
+
+    private val _currentLocation = MutableStateFlow<LocationSnapshot?>(null)
+    val currentLocation = _currentLocation.asStateFlow()
+
+    private val _nearestHotlines = MutableStateFlow<List<Hotline>>(emptyList())
+    val nearestHotlines = _nearestHotlines.asStateFlow()
+
+    private val _isAiScanning = MutableStateFlow(false)
+    val isAiScanning = _isAiScanning.asStateFlow()
+
+    private val _lastAiScanTime = MutableStateFlow(sessionManager.getLastAiScanTime())
+    val lastAiScanTime = _lastAiScanTime.asStateFlow()
+
+    // Safe Test / Demo Mode (disabled by default so real emergency calling works according to user's route)
+    private val _isDemoMode = MutableStateFlow(false)
+    val isDemoMode = _isDemoMode.asStateFlow()
+
+    private var countdownCoroutineJob: Job? = null
+    private var alarmMediaPlayer: MediaPlayer? = null
+
     init {
         if (sessionManager.isExperimentalMotionDetectionEnabled()) {
             motionDetector.startMonitoring()
         }
-        motionDetector.onImpactDistressDetected = { peakG ->
-            onVoiceDistressDetected("Experimental Motion Impact ($peakG m/s²)")
+        motionDetector.onImpactDistressDetected = { peakGForce ->
+            onVoiceDistressDetected("Experimental Motion Impact ($peakGForce m/s²)")
         }
+
         viewModelScope.launch {
             incidentRepo.refresh()
         }
 
         voiceAssistManager.onTranscriptUpdate = { transcript, cycle ->
-            val current = _emergencyState.value
-            if (current is EmergencyState.VoiceAssistActive) {
-                _emergencyState.value = current.copy(
+            val currentState = _emergencyState.value
+            if (currentState is EmergencyState.VoiceAssistActive) {
+                _emergencyState.value = currentState.copy(
                     liveTranscript = transcript,
                     cycleCount = cycle
                 )
             }
         }
+
+        loadData()
+        refreshLocation()
     }
+
+    // ==========================================
+    // AUTHENTICATION & USER PROFILE
+    // ==========================================
 
     fun signInWithGoogle(displayName: String, email: String, photoUrl: String? = null) {
         sessionManager.saveGoogleSession(displayName, email, photoUrl)
@@ -145,23 +207,25 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    fun updateCallPriority(callPriority: com.resqlink.ai.domain.model.CallPriority) {
+    fun updateCallPriority(callPriority: CallPriority) {
         sessionManager.updateCallPriority(callPriority)
     }
 
-    fun updateSimPreference(simPreference: com.resqlink.ai.domain.model.SimPreference) {
+    fun updateSimPreference(simPreference: SimPreference) {
         sessionManager.updateSimPreference(simPreference)
     }
 
-    fun getDetectedSims(): List<com.resqlink.ai.data.telephony.DetectedSim> {
+    fun getDetectedSims(): List<DetectedSim> {
         return callManager.getDetectedSims()
     }
 
-    private val _isAiScanning = MutableStateFlow(false)
-    val isAiScanning = _isAiScanning.asStateFlow()
+    fun toggleDemoMode(enabled: Boolean) {
+        _isDemoMode.value = enabled
+    }
 
-    private val _lastAiScanTime = MutableStateFlow(sessionManager.getLastAiScanTime())
-    val lastAiScanTime = _lastAiScanTime.asStateFlow()
+    // ==========================================
+    // API KEYS CONFIGURATION
+    // ==========================================
 
     fun getGeminiApiKey(): String = sessionManager.getGeminiApiKey()
 
@@ -181,33 +245,68 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
         sessionManager.setElevenLabsVoiceId(voiceId)
     }
 
+    // ==========================================
+    // DATA LOADING & GPS REFRESH
+    // ==========================================
+
+    fun loadData() {
+        viewModelScope.launch {
+            _allHotlines.value = emergencyRepository.getAllHotlines()
+            _trustedContacts.value = emergencyRepository.getTrustedContacts()
+        }
+    }
+
+    fun refreshLocation(autoAiScan: Boolean = true) {
+        viewModelScope.launch {
+            val freshLocationSnapshot = locationProvider.getCurrentOrCachedLocation(timeoutMs = 4000L)
+            _currentLocation.value = freshLocationSnapshot
+            if (freshLocationSnapshot != null) {
+                val currentNearbyStations = emergencyRepository.getNearestHotlines(
+                    freshLocationSnapshot.latitude,
+                    freshLocationSnapshot.longitude,
+                    radiusKm = 5.0
+                )
+                _nearestHotlines.value = currentNearbyStations
+
+                val hasAiDiscoveredStation = currentNearbyStations.any { it.source == "AI_GEMINI" && (it.distanceKm ?: 99.0) <= 6.5 }
+                val lastScanTimestamp = sessionManager.getLastAiScanTime()
+                val isScanDataStale = (System.currentTimeMillis() - lastScanTimestamp) > (30 * 60 * 1000L)
+
+                if (autoAiScan && (!hasAiDiscoveredStation || isScanDataStale)) {
+                    triggerAiHotlineScan()
+                }
+            } else {
+                _nearestHotlines.value = listOf(emergencyRepository.getUniversalFallback())
+            }
+        }
+    }
+
     fun triggerAiHotlineScan() {
         if (_isAiScanning.value) return
         viewModelScope.launch {
             _isAiScanning.value = true
             try {
-                val loc = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation()
-                if (loc != null) {
-                    val aiService = com.resqlink.ai.ai.HotlineAiService()
-                    val key = sessionManager.getGeminiApiKey()
-                    val discovered = aiService.discover5kmHotlines(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude,
-                        resolvedCity = loc.address,
-                        apiKey = key
+                val targetLocation = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation()
+                if (targetLocation != null) {
+                    val hotlineAiService = com.resqlink.ai.ai.HotlineAiService()
+                    val apiKey = sessionManager.getGeminiApiKey()
+                    val discoveredHotlinesList = hotlineAiService.discover5kmHotlines(
+                        latitude = targetLocation.latitude,
+                        longitude = targetLocation.longitude,
+                        resolvedCity = targetLocation.address,
+                        apiKey = apiKey
                     )
-                    if (discovered.isNotEmpty()) {
-                        repository.upsertHotlines(discovered)
-                        val now = System.currentTimeMillis()
-                        sessionManager.setLastAiScanTime(now)
-                        _lastAiScanTime.value = now
+                    if (discoveredHotlinesList.isNotEmpty()) {
+                        emergencyRepository.upsertHotlines(discoveredHotlinesList)
+                        val currentTimeMillis = System.currentTimeMillis()
+                        sessionManager.setLastAiScanTime(currentTimeMillis)
+                        _lastAiScanTime.value = currentTimeMillis
                     }
-                    // Refresh hotlines list with new cached stations
-                    _nearestHotlines.value = repository.getNearestHotlines(loc.latitude, loc.longitude, radiusKm = 5.0)
-                    _allHotlines.value = repository.getAllHotlines()
+                    _nearestHotlines.value = emergencyRepository.getNearestHotlines(targetLocation.latitude, targetLocation.longitude, radiusKm = 5.0)
+                    _allHotlines.value = emergencyRepository.getAllHotlines()
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("EmergencyViewModel", "Manual AI hotline scan error: ${e.message}", e)
+            } catch (exception: Exception) {
+                Log.e("EmergencyViewModel", "Manual AI hotline scan error: ${exception.message}", exception)
             } finally {
                 _isAiScanning.value = false
             }
@@ -216,12 +315,12 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun togglePinHotline(hotline: Hotline) {
         viewModelScope.launch {
-            repository.setPinnedHotline(hotline.id, !hotline.isPinned)
-            val loc = _currentLocation.value
-            if (loc != null) {
-                _nearestHotlines.value = repository.getNearestHotlines(loc.latitude, loc.longitude, radiusKm = 5.0)
+            emergencyRepository.setPinnedHotline(hotline.id, !hotline.isPinned)
+            val currentLocationSnapshot = _currentLocation.value
+            if (currentLocationSnapshot != null) {
+                _nearestHotlines.value = emergencyRepository.getNearestHotlines(currentLocationSnapshot.latitude, currentLocationSnapshot.longitude, radiusKm = 5.0)
             }
-            _allHotlines.value = repository.getAllHotlines()
+            _allHotlines.value = emergencyRepository.getAllHotlines()
         }
     }
 
@@ -229,136 +328,90 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
         callManager.dialFamilyMember(phoneNumber, userProfile.value.simPreference)
     }
 
-    private val _emergencyState = MutableStateFlow<EmergencyState>(EmergencyState.Idle)
-    val emergencyState = _emergencyState.asStateFlow()
-
-    private val _allHotlines = MutableStateFlow<List<Hotline>>(emptyList())
-    val allHotlines = _allHotlines.asStateFlow()
-
-    private val _trustedContacts = MutableStateFlow<List<TrustedContact>>(emptyList())
-    val trustedContacts = _trustedContacts.asStateFlow()
-
-    private val _currentLocation = MutableStateFlow<LocationSnapshot?>(null)
-    val currentLocation = _currentLocation.asStateFlow()
-
-    private val _nearestHotlines = MutableStateFlow<List<Hotline>>(emptyList())
-    val nearestHotlines = _nearestHotlines.asStateFlow()
-
-    // Safe Test / Demo Mode (disabled by default so real emergency calling works according to user's route)
-    private val _isDemoMode = MutableStateFlow(false)
-    val isDemoMode = _isDemoMode.asStateFlow()
-
-    fun toggleDemoMode(enabled: Boolean) {
-        _isDemoMode.value = enabled
-    }
-
-    private var countdownJob: Job? = null
-
-    init {
-        loadData()
-        refreshLocation()
-    }
-
-    fun loadData() {
-        viewModelScope.launch {
-            _allHotlines.value = repository.getAllHotlines()
-            _trustedContacts.value = repository.getTrustedContacts()
-        }
-    }
-
-    fun refreshLocation(autoAiScan: Boolean = true) {
-        viewModelScope.launch {
-            val loc = locationProvider.getCurrentOrCachedLocation(timeoutMs = 4000L)
-            _currentLocation.value = loc
-            if (loc != null) {
-                val currentStations = repository.getNearestHotlines(loc.latitude, loc.longitude, radiusKm = 5.0)
-                _nearestHotlines.value = currentStations
-
-                val hasAiDiscovered = currentStations.any { it.source == "AI_GEMINI" && (it.distanceKm ?: 99.0) <= 6.5 }
-                val lastScan = sessionManager.getLastAiScanTime()
-                val isStale = (System.currentTimeMillis() - lastScan) > (30 * 60 * 1000L)
-
-                if (autoAiScan && (!hasAiDiscovered || isStale)) {
-                    triggerAiHotlineScan()
-                }
-            } else {
-                _nearestHotlines.value = listOf(repository.getUniversalFallback())
-            }
-        }
+    fun dialHotlineDirectly(hotline: Hotline) {
+        callManager.initiateEmergencyCall(hotline, userProfile.value.simPreference)
     }
 
     /**
      * Resolves the target name and phone number dynamically based on user's active CallPriority.
      */
     fun resolveCallTarget(): Pair<String, String> {
-        val profile = userProfile.value
-        val nearest = _nearestHotlines.value.firstOrNull() ?: dbHelper.getUniversalFallback911()
-        return when (profile.callPriority) {
-            com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> {
-                val name = profile.primaryContactName.ifBlank { "Family (ICE)" }
-                val phone = profile.primaryContactPhone.ifBlank { nearest.primaryNumber }
-                Pair(name, phone)
+        val currentProfile = userProfile.value
+        val nearestHotlineStation = _nearestHotlines.value.firstOrNull() ?: databaseHelper.getUniversalFallback911()
+        return when (currentProfile.callPriority) {
+            CallPriority.FAMILY_FIRST -> {
+                val familyContactName = currentProfile.primaryContactName.ifBlank { "Family (ICE)" }
+                val familyPhoneNumber = currentProfile.primaryContactPhone.ifBlank { nearestHotlineStation.primaryNumber }
+                Pair(familyContactName, familyPhoneNumber)
             }
-            com.resqlink.ai.domain.model.CallPriority.UNIVERSAL_911 -> {
+            CallPriority.UNIVERSAL_911 -> {
                 Pair("Universal 911 Dispatch", "911")
             }
-            com.resqlink.ai.domain.model.CallPriority.LOCAL_HOTLINE -> {
-                val name = nearest.name.ifBlank { "Local Emergency Station" }
-                val phone = nearest.primaryNumber.ifBlank { "122" }
-                Pair(name, phone)
+            CallPriority.LOCAL_HOTLINE -> {
+                val localStationName = nearestHotlineStation.name.ifBlank { "Local Emergency Station" }
+                val localStationPhone = nearestHotlineStation.primaryNumber.ifBlank { "122" }
+                Pair(localStationName, localStationPhone)
             }
         }
     }
 
+    // ==========================================
+    // GUARDIAN MODE PERSISTENT BACKGROUND LISTENER
+    // ==========================================
+
     fun isGuardianModeEnabled(): Boolean = sessionManager.isGuardianModeEnabled()
 
     fun toggleGuardianMode() {
-        val willEnable = !sessionManager.isGuardianModeEnabled()
-        sessionManager.setGuardianModeEnabled(willEnable)
+        val willEnableGuardian = !sessionManager.isGuardianModeEnabled()
+        sessionManager.setGuardianModeEnabled(willEnableGuardian)
 
-        val intent = Intent(context, GuardianForegroundService::class.java)
-        if (!willEnable) {
-            intent.action = GuardianForegroundService.ACTION_STOP
-            context.startService(intent)
+        val serviceIntent = Intent(applicationContext, GuardianForegroundService::class.java)
+        if (!willEnableGuardian) {
+            serviceIntent.action = GuardianForegroundService.ACTION_STOP
+            applicationContext.startService(serviceIntent)
             _emergencyState.value = EmergencyState.Idle
         } else {
-            intent.action = GuardianForegroundService.ACTION_START
+            serviceIntent.action = GuardianForegroundService.ACTION_START
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
+                applicationContext.startForegroundService(serviceIntent)
             } else {
-                context.startService(intent)
+                applicationContext.startService(serviceIntent)
             }
             _emergencyState.value = EmergencyState.GuardianActive(isMonitoring = true)
         }
     }
 
+    // ==========================================
+    // EMERGENCY TRIGGER DISPATCH & COUNTDOWNS
+    // ==========================================
+
     /**
      * Triggered by Voice SOS (Distress keyword detected by GuardianForegroundService)
      */
     fun onVoiceDistressDetected(phrase: String) {
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         startContinuousEmergencyAlarm()
 
-        val loc = _currentLocation.value
-        val nearest = _nearestHotlines.value.firstOrNull() ?: dbHelper.getUniversalFallback911()
+        val locationSnapshot = _currentLocation.value
+        val nearestStation = _nearestHotlines.value.firstOrNull() ?: databaseHelper.getUniversalFallback911()
         val (targetName, targetNumber) = resolveCallTarget()
 
         _emergencyState.value = EmergencyState.ConfirmationPending(
             detectedPhrase = phrase,
             remainingSeconds = 10,
-            location = loc,
-            nearestHotline = nearest,
+            location = locationSnapshot,
+            nearestHotline = nearestStation,
             callPriority = userProfile.value.callPriority,
             targetName = targetName,
             targetNumber = targetNumber
         )
 
-        countdownJob = viewModelScope.launch {
-            for (sec in 9 downTo 1) {
+        countdownCoroutineJob = viewModelScope.launch {
+            for (secondsRemaining in 9 downTo 1) {
                 delay(1000L)
-                val current = _emergencyState.value
-                if (current is EmergencyState.ConfirmationPending) {
-                    _emergencyState.value = current.copy(remainingSeconds = sec)
+                val currentState = _emergencyState.value
+                if (currentState is EmergencyState.ConfirmationPending) {
+                    _emergencyState.value = currentState.copy(remainingSeconds = secondsRemaining)
                 } else {
                     return@launch
                 }
@@ -374,28 +427,28 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      * Triggered by One-Tap SOS (Large Red Button)
      */
     fun onManualSosTapped() {
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         startContinuousEmergencyAlarm()
 
-        val loc = _currentLocation.value
-        val nearest = _nearestHotlines.value.firstOrNull() ?: dbHelper.getUniversalFallback911()
+        val locationSnapshot = _currentLocation.value
+        val nearestStation = _nearestHotlines.value.firstOrNull() ?: databaseHelper.getUniversalFallback911()
         val (targetName, targetNumber) = resolveCallTarget()
 
         _emergencyState.value = EmergencyState.ManualSosGracePeriod(
             remainingSeconds = 3,
-            location = loc,
-            nearestHotline = nearest,
+            location = locationSnapshot,
+            nearestHotline = nearestStation,
             callPriority = userProfile.value.callPriority,
             targetName = targetName,
             targetNumber = targetNumber
         )
 
-        countdownJob = viewModelScope.launch {
-            for (sec in 2 downTo 1) {
+        countdownCoroutineJob = viewModelScope.launch {
+            for (secondsRemaining in 2 downTo 1) {
                 delay(1000L)
-                val current = _emergencyState.value
-                if (current is EmergencyState.ManualSosGracePeriod) {
-                    _emergencyState.value = current.copy(remainingSeconds = sec)
+                val currentState = _emergencyState.value
+                if (currentState is EmergencyState.ManualSosGracePeriod) {
+                    _emergencyState.value = currentState.copy(remainingSeconds = secondsRemaining)
                 } else {
                     return@launch
                 }
@@ -407,54 +460,55 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun confirmEmergency(reason: String = "User Confirmed SOS") {
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         stopContinuousEmergencyAlarm()
-        GuardianForegroundService.dismissEmergencyDistressPopup(context)
+        GuardianForegroundService.dismissEmergencyDistressPopup(applicationContext)
+
         viewModelScope.launch {
-            val loc = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation(timeoutMs = 2000L)
-            val hotline = _nearestHotlines.value.firstOrNull() ?: repository.getUniversalFallback()
-            val contacts = _trustedContacts.value
-            val profile = userProfile.value
+            val locationSnapshot = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation(timeoutMs = 2000L)
+            val nearestHotline = _nearestHotlines.value.firstOrNull() ?: emergencyRepository.getUniversalFallback()
+            val contactsList = _trustedContacts.value
+            val currentProfile = userProfile.value
             val (targetName, targetNumber) = resolveCallTarget()
 
             val effectiveReason = if (_isDemoMode.value) "[DEMO SIMULATION] $reason" else reason
 
-            val sentCount = if (_isDemoMode.value) {
-                contacts.count { it.isAuthorizedForSafetyCheck }
+            val successfullySentSmsCount = if (_isDemoMode.value) {
+                contactsList.count { it.isAuthorizedForSafetyCheck }
             } else {
                 smsDispatcher.dispatchUnresponsiveAlerts(
-                    contacts = contacts,
-                    location = loc,
-                    nearestHotline = hotline
+                    contacts = contactsList,
+                    location = locationSnapshot,
+                    nearestHotline = nearestHotline
                 )
             }
 
             // Immediately initiate call according to user's configured CallPriority & Outgoing SIM Preference!
-            when (profile.callPriority) {
-                com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> {
-                    val familyPhone = profile.primaryContactPhone
-                    if (familyPhone.isNotBlank()) {
-                        callManager.dialFamilyMember(familyPhone, profile.simPreference)
+            when (currentProfile.callPriority) {
+                CallPriority.FAMILY_FIRST -> {
+                    val familyPhoneNumber = currentProfile.primaryContactPhone
+                    if (familyPhoneNumber.isNotBlank()) {
+                        callManager.dialFamilyMember(familyPhoneNumber, currentProfile.simPreference)
                     } else {
-                        callManager.initiateEmergencyCall(hotline, profile.simPreference)
+                        callManager.initiateEmergencyCall(nearestHotline, currentProfile.simPreference)
                     }
                 }
-                com.resqlink.ai.domain.model.CallPriority.UNIVERSAL_911 -> {
-                    callManager.dial911(profile.simPreference)
+                CallPriority.UNIVERSAL_911 -> {
+                    callManager.dial911(currentProfile.simPreference)
                 }
-                com.resqlink.ai.domain.model.CallPriority.LOCAL_HOTLINE -> {
-                    callManager.initiateEmergencyCall(hotline, profile.simPreference)
+                CallPriority.LOCAL_HOTLINE -> {
+                    callManager.initiateEmergencyCall(nearestHotline, currentProfile.simPreference)
                 }
             }
 
             _emergencyState.value = EmergencyState.EmergencyConfirmed(
                 reason = effectiveReason,
-                callPriority = profile.callPriority,
+                callPriority = currentProfile.callPriority,
                 targetName = targetName,
                 targetNumber = targetNumber,
-                dialedHotline = hotline,
-                smsSentCount = sentCount,
-                location = loc
+                dialedHotline = nearestHotline,
+                smsSentCount = successfullySentSmsCount,
+                location = locationSnapshot
             )
         }
     }
@@ -463,22 +517,22 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      * Re-dials the active priority target directly with user's SIM Preference.
      */
     fun executeConfiguredCall() {
-        val profile = userProfile.value
-        val hotline = _nearestHotlines.value.firstOrNull() ?: dbHelper.getUniversalFallback911()
-        when (profile.callPriority) {
-            com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> {
-                val familyPhone = profile.primaryContactPhone
+        val currentProfile = userProfile.value
+        val nearestHotline = _nearestHotlines.value.firstOrNull() ?: databaseHelper.getUniversalFallback911()
+        when (currentProfile.callPriority) {
+            CallPriority.FAMILY_FIRST -> {
+                val familyPhone = currentProfile.primaryContactPhone
                 if (familyPhone.isNotBlank()) {
-                    callManager.dialFamilyMember(familyPhone, profile.simPreference)
+                    callManager.dialFamilyMember(familyPhone, currentProfile.simPreference)
                 } else {
-                    callManager.initiateEmergencyCall(hotline, profile.simPreference)
+                    callManager.initiateEmergencyCall(nearestHotline, currentProfile.simPreference)
                 }
             }
-            com.resqlink.ai.domain.model.CallPriority.UNIVERSAL_911 -> {
-                callManager.dial911(profile.simPreference)
+            CallPriority.UNIVERSAL_911 -> {
+                callManager.dial911(currentProfile.simPreference)
             }
-            com.resqlink.ai.domain.model.CallPriority.LOCAL_HOTLINE -> {
-                callManager.initiateEmergencyCall(hotline, profile.simPreference)
+            CallPriority.LOCAL_HOTLINE -> {
+                callManager.initiateEmergencyCall(nearestHotline, currentProfile.simPreference)
             }
         }
     }
@@ -489,23 +543,23 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      * patient vitals, GPS coordinates, and medical alerts.
      */
     fun startAccidentVoiceAssist(reason: String = "Accident Incapacitation") {
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         stopContinuousEmergencyAlarm()
-        GuardianForegroundService.dismissEmergencyDistressPopup(context)
+        GuardianForegroundService.dismissEmergencyDistressPopup(applicationContext)
 
         viewModelScope.launch {
-            val loc = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation(timeoutMs = 2000L)
-            val hotline = _nearestHotlines.value.firstOrNull() ?: repository.getUniversalFallback()
-            val contacts = _trustedContacts.value
-            val profile = userProfile.value
+            val locationSnapshot = _currentLocation.value ?: locationProvider.getCurrentOrCachedLocation(timeoutMs = 2000L)
+            val nearestHotline = _nearestHotlines.value.firstOrNull() ?: emergencyRepository.getUniversalFallback()
+            val contactsList = _trustedContacts.value
+            val currentProfile = userProfile.value
             val (targetName, targetNumber) = resolveCallTarget()
 
             // 1. Dispatch SMS alert with GPS to pre-authorized safety contacts
             if (!_isDemoMode.value) {
                 smsDispatcher.dispatchUnresponsiveAlerts(
-                    contacts = contacts,
-                    location = loc,
-                    nearestHotline = hotline
+                    contacts = contactsList,
+                    location = locationSnapshot,
+                    nearestHotline = nearestHotline
                 )
             }
 
@@ -519,25 +573,25 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                 liveTranscript = "Initializing Voice Assist broadcast...",
                 cycleCount = 1,
                 isHandoverComplete = false,
-                location = loc
+                location = locationSnapshot
             )
 
             // 4. Start speech recognition in background to listen for user consciousness
             speechHandoverDetector?.destroy()
-            speechHandoverDetector = com.resqlink.ai.service.SpeechHandoverDetector(context) { heardSpeech ->
+            speechHandoverDetector = SpeechHandoverDetector(applicationContext) { heardSpeech ->
                 performHandoverToUser(heardSpeech)
             }
             speechHandoverDetector?.startListening()
 
             // 5. Start Voice Assist emergency broadcast on speakerphone (ElevenLabs with Offline TTS fallback)
-            val addr = loc?.address?.ifBlank { null } ?: "Metro Manila vicinity"
+            val streetAddress = locationSnapshot?.address?.ifBlank { null } ?: "Metro Manila vicinity"
             voiceAssistManager.startEmergencyBroadcast(
-                userName = profile.displayName,
-                address = addr,
-                latitude = loc?.latitude ?: 14.6507,
-                longitude = loc?.longitude ?: 121.0509,
-                bloodType = profile.bloodType,
-                allergies = profile.allergies,
+                userName = currentProfile.displayName,
+                address = streetAddress,
+                latitude = locationSnapshot?.latitude ?: 14.6507,
+                longitude = locationSnapshot?.longitude ?: 121.0509,
+                bloodType = currentProfile.bloodType,
+                allergies = currentProfile.allergies,
                 elevenLabsApiKey = sessionManager.getElevenLabsApiKey(),
                 elevenLabsVoiceId = sessionManager.getElevenLabsVoiceId(),
                 geminiApiKey = sessionManager.getGeminiVoiceApiKey(),
@@ -550,16 +604,16 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      * Hands over the call to the patient when coherent speech is detected or manual button is tapped.
      */
     fun performHandoverToUser(userWords: String? = null) {
-        val current = _emergencyState.value
-        if (current is EmergencyState.VoiceAssistActive && !current.isHandoverComplete) {
+        val currentState = _emergencyState.value
+        if (currentState is EmergencyState.VoiceAssistActive && !currentState.isHandoverComplete) {
             speechHandoverDetector?.stopListening()
             voiceAssistManager.performHandover(
                 elevenLabsApiKey = sessionManager.getElevenLabsApiKey(),
                 elevenLabsVoiceId = sessionManager.getElevenLabsVoiceId()
             ) {
-                val updated = _emergencyState.value
-                if (updated is EmergencyState.VoiceAssistActive) {
-                    _emergencyState.value = updated.copy(
+                val updatedState = _emergencyState.value
+                if (updatedState is EmergencyState.VoiceAssistActive) {
+                    _emergencyState.value = updatedState.copy(
                         isHandoverComplete = true,
                         detectedUserWords = userWords,
                         liveTranscript = "[Handover complete. Patient speaking live with dispatcher.]"
@@ -575,26 +629,26 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      * In-person physical scene questions return the strict unconfirmed safety response.
      */
     fun answerDispatcherQuestion(question: String) {
-        val current = _emergencyState.value
-        if (current is EmergencyState.VoiceAssistActive && !current.isHandoverComplete) {
-            val telemetry = crashTelemetryProvider.getSnapshot()
-            val profile = userProfile.value
-            val intent = dispatcherClassifier.classifyQuestion(question)
-            val answer = responseSynthesizer.synthesizeResponse(
-                intent = intent,
-                telemetry = telemetry,
-                userProfile = profile,
-                location = current.location
+        val currentState = _emergencyState.value
+        if (currentState is EmergencyState.VoiceAssistActive && !currentState.isHandoverComplete) {
+            val crashTelemetrySnapshot = crashTelemetryProvider.getSnapshot()
+            val currentProfile = userProfile.value
+            val classifiedIntent = dispatcherQuestionClassifier.classifyQuestion(question)
+            val synthesizedAnswer = dispatcherResponseSynthesizer.synthesizeResponse(
+                intent = classifiedIntent,
+                telemetry = crashTelemetrySnapshot,
+                userProfile = currentProfile,
+                location = currentState.location
             )
 
-            _emergencyState.value = current.copy(
+            _emergencyState.value = currentState.copy(
                 lastDispatcherQuestion = question,
-                lastAiAnswer = answer,
-                liveTranscript = "Dispatcher: \"$question\"\nResQLink AI: \"$answer\""
+                lastAiAnswer = synthesizedAnswer,
+                liveTranscript = "Dispatcher: \"$question\"\nResQLink AI: \"$synthesizedAnswer\""
             )
 
             voiceAssistManager.speakDispatcherAnswer(
-                answerText = answer,
+                answerText = synthesizedAnswer,
                 elevenLabsApiKey = sessionManager.getElevenLabsApiKey(),
                 elevenLabsVoiceId = sessionManager.getElevenLabsVoiceId(),
                 geminiApiKey = sessionManager.getGeminiVoiceApiKey(),
@@ -608,7 +662,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun endEmergencyCall() {
         stopContinuousEmergencyAlarm()
-        GuardianForegroundService.dismissEmergencyDistressPopup(context)
+        GuardianForegroundService.dismissEmergencyDistressPopup(applicationContext)
         voiceAssistManager.stop()
         speechHandoverDetector?.stopListening()
         _emergencyState.value = if (GuardianForegroundService.isRunning) {
@@ -624,9 +678,9 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun cancelSos() {
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         stopContinuousEmergencyAlarm()
-        GuardianForegroundService.dismissEmergencyDistressPopup(context)
+        GuardianForegroundService.dismissEmergencyDistressPopup(applicationContext)
         voiceAssistManager.stop()
         speechHandoverDetector?.stopListening()
         _emergencyState.value = if (GuardianForegroundService.isRunning) {
@@ -638,7 +692,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         super.onCleared()
-        countdownJob?.cancel()
+        countdownCoroutineJob?.cancel()
         stopContinuousEmergencyAlarm()
         voiceAssistManager.release()
         speechHandoverDetector?.destroy()
@@ -646,13 +700,13 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
         motionDetector.stopMonitoring()
     }
 
-    fun dialHotlineDirectly(hotline: Hotline) {
-        callManager.initiateEmergencyCall(hotline, userProfile.value.simPreference)
-    }
+    // ==========================================
+    // TRUSTED EMERGENCY CONTACTS
+    // ==========================================
 
     fun addTrustedContact(name: String, phone: String, relationship: String) {
         viewModelScope.launch {
-            repository.saveTrustedContact(
+            emergencyRepository.saveTrustedContact(
                 TrustedContact(
                     name = name,
                     phoneNumber = phone,
@@ -660,18 +714,20 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                     isAuthorizedForSafetyCheck = true
                 )
             )
-            _trustedContacts.value = repository.getTrustedContacts()
+            _trustedContacts.value = emergencyRepository.getTrustedContacts()
         }
     }
 
     fun removeTrustedContact(id: Long) {
         viewModelScope.launch {
-            repository.deleteTrustedContact(id)
-            _trustedContacts.value = repository.getTrustedContacts()
+            emergencyRepository.deleteTrustedContact(id)
+            _trustedContacts.value = emergencyRepository.getTrustedContacts()
         }
     }
 
-    private var alarmMediaPlayer: MediaPlayer? = null
+    // ==========================================
+    // CONTINUOUS AUDITORY & HAPTIC ALARMS
+    // ==========================================
 
     /**
      * Starts continuous repeating ringing vibration (800ms on, 400ms off) and
@@ -680,32 +736,33 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     fun startContinuousEmergencyAlarm() {
         // 1. Continuous Repeating Vibration (repeat = 0 loops indefinitely)
         try {
-            val pattern = longArrayOf(0, 800, 400, 800, 400)
+            val vibrationPattern = longArrayOf(0, 800, 400, 800, 400)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                val vibratorManager = applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vibratorManager?.defaultVibrator?.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0))
             } else {
                 @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                val vibrator = applicationContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                    vibrator?.vibrate(VibrationEffect.createWaveform(vibrationPattern, 0))
                 } else {
                     @Suppress("DEPRECATION")
-                    vibrator?.vibrate(pattern, 0)
+                    vibrator?.vibrate(vibrationPattern, 0)
                 }
             }
-        } catch (e: Exception) {
-            android.util.Log.e("EmergencyViewModel", "Continuous vibration error: ${e.message}")
+        } catch (exception: Exception) {
+            Log.e("EmergencyViewModel", "Continuous vibration error: ${exception.message}")
         }
 
         // 2. Loud Emergency Alarm Siren (bypasses DND with USAGE_ALARM)
         try {
             stopAlarmSound()
-            val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            val alarmSoundRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
             alarmMediaPlayer = MediaPlayer().apply {
-                setDataSource(context, alarmUri)
+                setDataSource(applicationContext, alarmSoundRingtoneUri)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
@@ -716,8 +773,8 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                 prepare()
                 start()
             }
-        } catch (e: Exception) {
-            android.util.Log.e("EmergencyViewModel", "Alarm siren audio error: ${e.message}")
+        } catch (exception: Exception) {
+            Log.e("EmergencyViewModel", "Alarm siren audio error: ${exception.message}")
         }
     }
 
@@ -727,16 +784,14 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     fun stopContinuousEmergencyAlarm() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                val vibratorManager = applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 vibratorManager?.defaultVibrator?.cancel()
             } else {
                 @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                val vibrator = applicationContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                 vibrator?.cancel()
             }
-        } catch (e: Exception) {
-            // Ignored
-        }
+        } catch (ignored: Exception) {}
         stopAlarmSound()
     }
 
@@ -748,8 +803,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 player.release()
             }
-        } catch (e: Exception) {
-            // Ignored
+        } catch (ignored: Exception) {
         } finally {
             alarmMediaPlayer = null
         }
@@ -778,25 +832,25 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun checkInSafetyJourneySafe(): SafetyJourney? {
-        val current = safetyJourneyRepo.activeJourney.value ?: return null
+        val currentJourney = safetyJourneyRepository.activeJourney.value ?: return null
         journeyScheduler.cancelAllAlarms()
-        val resolved = current.copy(
-            status = com.resqlink.ai.safetyjourney.JourneyStatus.RESOLVED_SAFE,
+        val safeJourney = currentJourney.copy(
+            status = JourneyStatus.RESOLVED_SAFE,
             completedTimeMillis = System.currentTimeMillis()
         )
-        safetyJourneyRepo.archiveJourney(resolved)
-        return resolved
+        safetyJourneyRepository.archiveJourney(safeJourney)
+        return safeJourney
     }
 
     fun cancelSafetyJourney(): SafetyJourney? {
-        val current = safetyJourneyRepo.activeJourney.value ?: return null
+        val currentJourney = safetyJourneyRepository.activeJourney.value ?: return null
         journeyScheduler.cancelAllAlarms()
-        val cancelled = current.copy(
-            status = com.resqlink.ai.safetyjourney.JourneyStatus.CANCELLED,
+        val cancelledJourney = currentJourney.copy(
+            status = JourneyStatus.CANCELLED,
             completedTimeMillis = System.currentTimeMillis()
         )
-        safetyJourneyRepo.archiveJourney(cancelled)
-        return cancelled
+        safetyJourneyRepository.archiveJourney(cancelledJourney)
+        return cancelledJourney
     }
 
     // ==========================================
@@ -804,7 +858,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     // ==========================================
 
     fun saveRescueProfile(profile: RescueProfile) {
-        rescueCardRepo.saveProfile(profile)
+        rescueCardRepository.saveProfile(profile)
     }
 
     fun updateRescueCardVisibility(
@@ -816,7 +870,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
         isContactsVisible: Boolean? = null,
         isOrganDonorVisible: Boolean? = null
     ) {
-        rescueCardRepo.updateVisibility(
+        rescueCardRepository.updateVisibility(
             isBloodTypeVisible,
             isAllergiesVisible,
             isMedicationsVisible,
@@ -828,7 +882,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun resetRescueCardToDefault() {
-        rescueCardRepo.resetToDefault()
+        rescueCardRepository.resetToDefault()
     }
 
     // ==========================================
@@ -858,7 +912,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun exportIncidentReport(record: IncidentRecord, asJson: Boolean = false) {
-        IncidentExporter.shareReport(context, record, asJson)
+        IncidentExporter.shareReport(applicationContext, record, asJson)
     }
 
     fun deleteIncidentLog(incidentId: String) {

@@ -13,9 +13,31 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * # SmsDispatcher
+ *
+ * Responsible for formatting and transmitting emergency text messages directly across
+ * the physical cellular radio via standard SMS.
+ *
+ * Ordinary Human Overview:
+ * When an emergency is triggered, this class composes an alert message containing:
+ * 1. An urgent header ("EMERGENCY ALERT: [User Name] may be in distress").
+ * 2. Live GPS coordinates with a clickable Google Maps link and accuracy radius.
+ * 3. The nearest local emergency hotline identified by the offline database.
+ * 4. The exact time the alert was generated.
+ *
+ * It sends this text to all authorized [TrustedContact] recipients using the Android
+ * [SmsManager]. Because it relies purely on standard cellular GSM SMS, it requires NO
+ * internet connection, Wi-Fi, or mobile data.
+ */
 class SmsDispatcher(private val context: Context) {
 
-    private val smsManager: SmsManager by lazy {
+    /**
+     * Resolves the proper [SmsManager] instance based on the device's Android version.
+     * Android 12 (API 31+) uses `context.getSystemService(SmsManager::class.java)`,
+     * while earlier versions use `SmsManager.getDefault()`.
+     */
+    private val systemSmsManager: SmsManager by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             context.getSystemService(SmsManager::class.java)
         } else {
@@ -24,48 +46,79 @@ class SmsDispatcher(private val context: Context) {
         }
     }
 
+    /**
+     * Dispatches emergency alerts to all authorized trusted contacts.
+     *
+     * @param contactList The list of candidate emergency contacts.
+     * @param locationSnapshot The user's live GPS fix (latitude, longitude, accuracy).
+     * @param nearestHotline The closest emergency station discovered by the offline database.
+     * @param userName The name of the user to display in the alert message.
+     * @return The number of contacts that successfully received an SMS transmission attempt.
+     */
     fun dispatchUnresponsiveAlerts(
         contacts: List<TrustedContact>,
         location: LocationSnapshot?,
         nearestHotline: Hotline?,
         userName: String = "ResQLink User"
     ): Int {
-        val hasSmsPermission = ContextCompat.checkSelfPermission(
+        // 1. Verify the app has permission to send SMS
+        val hasSendSmsPermission = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (!hasSmsPermission) return 0
+        if (!hasSendSmsPermission) {
+            return 0
+        }
 
-        val timeString = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
-        val mapsLink = location?.let { "https://maps.google.com/?q=${it.latitude},${it.longitude} (Acc: ${it.accuracyMeters.toInt()}m)" }
-            ?: "GPS unavailable"
+        // 2. Format the time and GPS map link
+        val formattedTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+        val mapLink = location?.let {
+            "https://maps.google.com/?q=${it.latitude},${it.longitude} (Acc: ${it.accuracyMeters.toInt()}m)"
+        } ?: "GPS unavailable"
 
-        val hotlineInfo = nearestHotline?.let { "${it.name} (${it.primaryNumber})" } ?: "911 Universal"
+        val hotlineDetails = nearestHotline?.let {
+            "${it.name} (${it.primaryNumber})"
+        } ?: "911 Universal"
 
-        val message = "EMERGENCY ALERT (ResQLink AI): $userName may be unresponsive or in distress.\n" +
-                "Location: $mapsLink\n" +
-                "Nearest Hotline: $hotlineInfo\n" +
-                "Time: $timeString\n" +
+        // 3. Compose the emergency text message
+        val emergencyMessage = "EMERGENCY ALERT (ResQLink AI): $userName may be unresponsive or in distress.\n" +
+                "Location: $mapLink\n" +
+                "Nearest Hotline: $hotlineDetails\n" +
+                "Time: $formattedTime\n" +
                 "Do not ignore."
 
-        var sentCount = 0
-        val authorizedContacts = contacts.filter { it.isAuthorizedForSafetyCheck }
+        var totalSuccessfulTransmissions = 0
+        val authorizedRecipients = contacts.filter { it.isAuthorizedForSafetyCheck }
 
-        for (contact in authorizedContacts) {
+        // 4. Send the SMS to each authorized contact
+        for (contact in authorizedRecipients) {
             try {
-                val parts = smsManager.divideMessage(message)
-                if (parts.size > 1) {
-                    smsManager.sendMultipartTextMessage(contact.phoneNumber, null, parts, null, null)
+                // If message exceeds 160 characters, split into multipart SMS
+                val messageParts = systemSmsManager.divideMessage(emergencyMessage)
+                if (messageParts.size > 1) {
+                    systemSmsManager.sendMultipartTextMessage(
+                        contact.phoneNumber,
+                        null,
+                        messageParts,
+                        null,
+                        null
+                    )
                 } else {
-                    smsManager.sendTextMessage(contact.phoneNumber, null, message, null, null)
+                    systemSmsManager.sendTextMessage(
+                        contact.phoneNumber,
+                        null,
+                        emergencyMessage,
+                        null,
+                        null
+                    )
                 }
-                sentCount++
-            } catch (e: Exception) {
-                // Track failure silently to allow remaining contacts to receive the message
+                totalSuccessfulTransmissions++
+            } catch (transmissionException: Exception) {
+                // Log and continue to the next contact so one invalid number doesn't block others
             }
         }
 
-        return sentCount
+        return totalSuccessfulTransmissions
     }
 }

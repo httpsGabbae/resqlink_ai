@@ -15,159 +15,216 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.sqrt
 
+/**
+ * # MotionDetectionState
+ *
+ * Current operational phase of the motion distress detection engine.
+ */
 enum class MotionDetectionState {
+    /** The accelerometer sensor is disconnected or idle. */
     IDLE,
+
+    /** Actively sampling 3-axis accelerometer readings in the background. */
     MONITORING,
+
+    /** High-G collision spike detected. Evaluating subsequent 3.5 seconds for complete stillness. */
     IMPACT_DETECTED_EVALUATING,
+
+    /** Impact confirmed followed by sustained inactivity. Safety countdown triggered. */
     DISTRESS_TRIGGERED
 }
 
 /**
- * Experimental Motion-Assisted Distress Detector.
- * Identifies high-G impact spikes (e.g. violent crash or hard fall) followed by
- * sustained physical inactivity.
+ * # MotionDistressDetector
  *
- * SAFETY INVARIANTS:
- * - Marked as EXPERIMENTAL.
- * - Must be explicitly opted-in by user.
- * - Triggers a 10-second interactive countdown.
- * - NEVER automatically dials 911 or public emergency services.
+ * Experimental fall and vehicle crash detection engine using the phone's hardware accelerometer.
+ *
+ * Ordinary Human Overview:
+ * How does a smartphone detect a severe bicycle crash, car collision, or dangerous fall?
+ * 1. **Phase 1 (The Impact Spike)**: A severe collision generates an acceleration spike
+ *    greater than 2.8 times Earth's gravity ($> 27.5\,\text{m/s}^2$).
+ * 2. **Phase 2 (The Inactivity Window)**: If someone merely drops their phone onto a sofa or
+ *    picks it up quickly, normal motion resumes immediately. But in a severe injury, the phone
+ *    remains completely motionless on the ground. The app monitors for 3.5 seconds of absolute stillness.
+ * 3. **Phase 3 (The Safety Countdown)**: If stillness is confirmed, ResQLink AI sounds an audible
+ *    chime and displays a 10-second countdown on screen so conscious users can easily cancel it.
+ *
+ * Safety Requirements:
+ * - Marked as EXPERIMENTAL and disabled by default.
+ * - Requires explicit user opt-in in Settings.
+ * - NEVER silently dials 911 or emergency services.
  */
 class MotionDistressDetector(
     private val context: Context,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) : SensorEventListener {
 
     companion object {
-        // Impact threshold in m/s² (Earth gravity g = 9.8 m/s²; 27.5 m/s² ≈ 2.8g)
+        /**
+         * Impact acceleration threshold in meters per second squared.
+         * Earth standard gravity is 9.8 m/s². 27.5 m/s² represents approximately 2.8g of force.
+         */
         const val IMPACT_ACCELERATION_THRESHOLD = 27.5f
 
-        // Inactivity window after impact (3.5 seconds of sustained stillness)
+        /**
+         * Window of time (3.5 seconds) following an impact during which the user's motion is evaluated.
+         */
         const val INACTIVITY_WINDOW_MILLIS = 3500L
 
-        // Inactivity delta threshold (must remain near 1.0g with minimal variation)
+        /**
+         * Maximum allowable gravitational deviation in m/s² to qualify as "complete stillness".
+         */
         const val INACTIVITY_MAX_VARIATION = 1.8f
     }
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-    private val accelerometer: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val hardwareAccelerometer: Sensor? = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
     private val _detectionState = MutableStateFlow(MotionDetectionState.IDLE)
     val detectionState: StateFlow<MotionDetectionState> = _detectionState.asStateFlow()
 
-    private var impactTimestamp: Long = 0L
-    private var recordedPeakG: Float = 0f
-    private var evaluationJob: Job? = null
-    private var isEvaluatingInactivity: Boolean = false
-    private val recentMagnitudes = mutableListOf<Float>()
+    private var impactTimestampEpochMillis: Long = 0L
+    private var recordedPeakAccelerationG: Float = 0f
+    private var inactivityEvaluationJob: Job? = null
+    private var isCurrentlyEvaluatingInactivity: Boolean = false
+    private val postImpactAccelerationMagnitudes = mutableListOf<Float>()
 
-    var onImpactDistressDetected: ((peakG: Float) -> Unit)? = null
+    var onImpactDistressDetected: ((peakAccelerationG: Float) -> Unit)? = null
 
-    fun isSensorAvailable(): Boolean = accelerometer != null
+    /**
+     * Checks if the device has a physical 3-axis accelerometer sensor.
+     */
+    fun isSensorAvailable(): Boolean = hardwareAccelerometer != null
 
+    /**
+     * Registers the sensor listener and begins monitoring acceleration changes.
+     */
     @Synchronized
     fun startMonitoring(): Boolean {
-        if (accelerometer == null || sensorManager == null) return false
+        if (hardwareAccelerometer == null || sensorManager == null) return false
 
         sensorManager.unregisterListener(this)
-        val registered = sensorManager.registerListener(
+        val isRegisteredSuccessfully = sensorManager.registerListener(
             this,
-            accelerometer,
+            hardwareAccelerometer,
             SensorManager.SENSOR_DELAY_UI
         )
 
-        if (registered) {
+        if (isRegisteredSuccessfully) {
             _detectionState.value = MotionDetectionState.MONITORING
         }
-        return registered
+        return isRegisteredSuccessfully
     }
 
+    /**
+     * Unregisters sensor callbacks and releases background evaluation tasks.
+     */
     @Synchronized
     fun stopMonitoring() {
-        evaluationJob?.cancel()
-        evaluationJob = null
-        isEvaluatingInactivity = false
+        inactivityEvaluationJob?.cancel()
+        inactivityEvaluationJob = null
+        isCurrentlyEvaluatingInactivity = false
         sensorManager?.unregisterListener(this)
         _detectionState.value = MotionDetectionState.IDLE
     }
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null || event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+    /**
+     * Triggered by Android hardware whenever the phone moves or accelerates in 3D space.
+     */
+    override fun onSensorChanged(sensorEvent: SensorEvent?) {
+        if (sensorEvent == null || sensorEvent.sensor.type != Sensor.TYPE_ACCELEROMETER) return
 
-        val ax = event.values[0]
-        val ay = event.values[1]
-        val az = event.values[2]
-        val magnitude = sqrt(ax * ax + ay * ay + az * az)
+        // 3D vector acceleration components along X, Y, and Z physical axes
+        val accelerationX = sensorEvent.values[0]
+        val accelerationY = sensorEvent.values[1]
+        val accelerationZ = sensorEvent.values[2]
 
-        if (isEvaluatingInactivity) {
-            synchronized(recentMagnitudes) {
-                recentMagnitudes.add(magnitude)
-                if (recentMagnitudes.size > 50) {
-                    recentMagnitudes.removeAt(0)
+        // 3D Euclidean vector magnitude: sqrt(X² + Y² + Z²)
+        val totalAccelerationMagnitude = sqrt(
+            accelerationX * accelerationX +
+            accelerationY * accelerationY +
+            accelerationZ * accelerationZ
+        )
+
+        // If currently in the 3.5-second post-impact evaluation phase, record stillness samples
+        if (isCurrentlyEvaluatingInactivity) {
+            synchronized(postImpactAccelerationMagnitudes) {
+                postImpactAccelerationMagnitudes.add(totalAccelerationMagnitude)
+                if (postImpactAccelerationMagnitudes.size > 50) {
+                    postImpactAccelerationMagnitudes.removeAt(0)
                 }
             }
             return
         }
 
-        // Detect high-G impact spike
-        if (magnitude >= IMPACT_ACCELERATION_THRESHOLD) {
-            triggerInactivityEvaluation(magnitude)
+        // Detect a high-G collision or fall impact spike
+        if (totalAccelerationMagnitude >= IMPACT_ACCELERATION_THRESHOLD) {
+            triggerInactivityEvaluation(totalAccelerationMagnitude)
         }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // No-op
+        // Accelerometer calibration accuracy change (no action needed)
     }
 
-    private fun triggerInactivityEvaluation(impactG: Float) {
-        isEvaluatingInactivity = true
-        impactTimestamp = System.currentTimeMillis()
-        recordedPeakG = impactG
+    /**
+     * Initiates the 3.5-second post-impact countdown to verify if the user remains incapacitated.
+     */
+    private fun triggerInactivityEvaluation(impactAccelerationMagnitude: Float) {
+        isCurrentlyEvaluatingInactivity = true
+        impactTimestampEpochMillis = System.currentTimeMillis()
+        recordedPeakAccelerationG = impactAccelerationMagnitude
         _detectionState.value = MotionDetectionState.IMPACT_DETECTED_EVALUATING
 
-        synchronized(recentMagnitudes) {
-            recentMagnitudes.clear()
+        synchronized(postImpactAccelerationMagnitudes) {
+            postImpactAccelerationMagnitudes.clear()
         }
 
-        evaluationJob?.cancel()
-        evaluationJob = scope.launch {
-            // Wait for the post-impact stabilization and inactivity window
+        inactivityEvaluationJob?.cancel()
+        inactivityEvaluationJob = coroutineScope.launch {
+            // Wait for 3.5 seconds while collecting motion data
             delay(INACTIVITY_WINDOW_MILLIS)
 
-            // Check if user remained inactive or resumed normal active movement
-            val samples = synchronized(recentMagnitudes) { recentMagnitudes.toList() }
-            isEvaluatingInactivity = false
+            val collectedMotionSamples = synchronized(postImpactAccelerationMagnitudes) {
+                postImpactAccelerationMagnitudes.toList()
+            }
+            isCurrentlyEvaluatingInactivity = false
 
-            if (samples.isEmpty()) {
+            if (collectedMotionSamples.isEmpty()) {
                 _detectionState.value = MotionDetectionState.MONITORING
                 return@launch
             }
 
-            val gravity = 9.8f
-            // Measure deviation from rest gravity
-            val maxDeviation = samples.maxOf { Math.abs(it - gravity) }
+            val standardEarthGravity = 9.8f
+            // Measure the maximum deviation from resting Earth gravity (9.8 m/s²)
+            val maximumGravitationalDeviation = collectedMotionSamples.maxOf { sample ->
+                Math.abs(sample - standardEarthGravity)
+            }
 
-            if (maxDeviation <= INACTIVITY_MAX_VARIATION) {
-                // Inactivity confirmed: Potential incapacitated user!
+            if (maximumGravitationalDeviation <= INACTIVITY_MAX_VARIATION) {
+                // Inactivity confirmed: The phone experienced a violent impact and has remained motionless
                 _detectionState.value = MotionDetectionState.DISTRESS_TRIGGERED
-                notifyDistress(recordedPeakG)
+                notifyDistress(recordedPeakAccelerationG)
             } else {
-                // User moved normally (e.g. picked up phone, running, dropped without injury) -> False positive dismissed!
+                // Normal motion resumed (the user picked up the phone or was uninjured) -> Dismiss as false alarm
                 _detectionState.value = MotionDetectionState.MONITORING
             }
         }
     }
 
-    private fun notifyDistress(peakG: Float) {
-        // Register trigger in EmergencyEventManager (triggers 10-second countdown with alarm and cancel button)
-        val gValueFormatted = String.format(java.util.Locale.US, "%.1fg", peakG / 9.8f)
+    /**
+     * Registers the trigger into the central [EmergencyEventManager] to launch the 10s countdown.
+     */
+    private fun notifyDistress(peakAccelerationG: Float) {
+        val formattedGForce = String.format(Locale.US, "%.1fg", peakAccelerationG / 9.8f)
         EmergencyEventManager.getInstance().registerTrigger(
             source = EmergencyTriggerSource.EXPERIMENTAL_MOTION_IMPACT,
-            detectedPhrase = "Impact detected ($gValueFormatted) followed by lack of movement."
+            detectedPhrase = "Impact detected ($formattedGForce) followed by lack of movement."
         )
 
-        onImpactDistressDetected?.invoke(peakG)
+        onImpactDistressDetected?.invoke(peakAccelerationG)
     }
 }

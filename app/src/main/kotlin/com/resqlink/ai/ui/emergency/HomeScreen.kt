@@ -375,8 +375,9 @@ fun HomeScreen(
         }
 
         if (showReadinessDialog) {
+            val activeReport = readinessReport ?: remember { viewModel.runReadinessCheck() }
             ReadinessCheckDialog(
-                report = readinessReport,
+                report = activeReport,
                 onRunDiagnostics = {
                     readinessReport = viewModel.runReadinessCheck()
                 },

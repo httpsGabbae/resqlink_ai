@@ -1,7 +1,5 @@
 package com.resqlink.ai.ui.emergency
 
-import android.graphics.Bitmap
-import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -15,6 +13,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FactCheck
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.resqlink.ai.guides.EmergencyGuide
 import com.resqlink.ai.guides.EmergencyGuideRepository
 import com.resqlink.ai.guides.GuideCategory
 import com.resqlink.ai.guides.GuideLanguage
@@ -42,7 +41,13 @@ import com.resqlink.ai.rescuecard.RescueCardQrHelper
 import com.resqlink.ai.rescuecard.RescueProfile
 
 /**
- * 2x2 Quick Preparedness Tools Grid displayed on HomeScreen.
+ * # PreparednessToolsGrid
+ *
+ * 2x2 Quick Preparedness Tools Grid displayed on HomeScreen:
+ * 1. Rescue Card & Offline QR
+ * 2. Offline Survival & CPR Guides
+ * 3. System Readiness Check & Safe Simulation
+ * 4. Incident Audit Logs & Shareable Reports
  */
 @Composable
 fun PreparednessToolsGrid(
@@ -78,7 +83,7 @@ fun PreparednessToolsGrid(
             )
 
             ToolTile(
-                icon = Icons.Default.MenuBook,
+                icon = Icons.AutoMirrored.Filled.MenuBook,
                 title = "Offline Guides",
                 subtitle = "CPR, Quake, Typhoon...",
                 iconTint = CyanTravel,
@@ -92,7 +97,7 @@ fun PreparednessToolsGrid(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ToolTile(
-                icon = Icons.Default.FactCheck,
+                icon = Icons.AutoMirrored.Filled.FactCheck,
                 title = "Readiness Check",
                 subtitle = "Hardware & safe test run",
                 iconTint = AmberWarning,
@@ -180,10 +185,10 @@ fun RescueCardDialog(
     onUpdateVisibility: (blood: Boolean?, allergies: Boolean?, meds: Boolean?, conditions: Boolean?, notes: Boolean?, contacts: Boolean?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val qrBitmap = remember(profile) {
+    val renderedQrBitmap = remember(profile) {
         try {
             RescueCardQrHelper.createQrBitmap(profile.toQrPayload(), dimensionPx = 360)
-        } catch (e: Exception) {
+        } catch (exception: Exception) {
             null
         }
     }
@@ -241,7 +246,7 @@ fun RescueCardDialog(
                 )
 
                 // QR Code Center Box
-                if (qrBitmap != null) {
+                if (renderedQrBitmap != null) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -254,7 +259,7 @@ fun RescueCardDialog(
                             modifier = Modifier.padding(4.dp)
                         ) {
                             Image(
-                                bitmap = qrBitmap.asImageBitmap(),
+                                bitmap = renderedQrBitmap.asImageBitmap(),
                                 contentDescription = "Rescue Card QR Code",
                                 modifier = Modifier
                                     .size(200.dp)
@@ -304,31 +309,31 @@ fun RescueCardDialog(
                 VisibilityToggleRow(
                     label = "Show Blood Type (${profile.bloodType})",
                     checked = profile.isBloodTypeVisible,
-                    onCheckedChange = { onUpdateVisibility(it, null, null, null, null, null) }
+                    onCheckedChange = { isVisible -> onUpdateVisibility(isVisible, null, null, null, null, null) }
                 )
 
                 VisibilityToggleRow(
                     label = "Show Allergies (${profile.allergies})",
                     checked = profile.isAllergiesVisible,
-                    onCheckedChange = { onUpdateVisibility(null, it, null, null, null, null) }
+                    onCheckedChange = { isVisible -> onUpdateVisibility(null, isVisible, null, null, null, null) }
                 )
 
                 VisibilityToggleRow(
                     label = "Show Medical Conditions (${profile.medicalConditions})",
                     checked = profile.isConditionsVisible,
-                    onCheckedChange = { onUpdateVisibility(null, null, null, it, null, null) }
+                    onCheckedChange = { isVisible -> onUpdateVisibility(null, null, null, isVisible, null, null) }
                 )
 
                 VisibilityToggleRow(
                     label = "Show Emergency Instructions",
                     checked = profile.isInstructionsVisible,
-                    onCheckedChange = { onUpdateVisibility(null, null, null, null, it, null) }
+                    onCheckedChange = { isVisible -> onUpdateVisibility(null, null, null, null, isVisible, null) }
                 )
 
                 VisibilityToggleRow(
                     label = "Show Emergency Contacts",
                     checked = profile.isContactsVisible,
-                    onCheckedChange = { onUpdateVisibility(null, null, null, null, null, it) }
+                    onCheckedChange = { isVisible -> onUpdateVisibility(null, null, null, null, null, isVisible) }
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -378,19 +383,19 @@ private fun VisibilityToggleRow(
 fun OfflineGuidesDialog(
     onDismiss: () -> Unit
 ) {
-    var selectedLang by remember { mutableStateOf(GuideLanguage.FILIPINO) }
+    var selectedLanguage by remember { mutableStateOf(GuideLanguage.FILIPINO) }
     var selectedCategory by remember { mutableStateOf(GuideCategory.CPR) }
-    var searchQuery by remember { mutableStateOf("") }
+    var guideSearchQuery by remember { mutableStateOf("") }
 
-    val guides = remember(selectedLang, searchQuery) {
-        if (searchQuery.isBlank()) {
-            EmergencyGuideRepository.getGuidesByLanguage(selectedLang)
+    val filteredEmergencyGuides = remember(selectedLanguage, guideSearchQuery) {
+        if (guideSearchQuery.isBlank()) {
+            EmergencyGuideRepository.getGuidesByLanguage(selectedLanguage)
         } else {
-            EmergencyGuideRepository.searchGuides(searchQuery, selectedLang)
+            EmergencyGuideRepository.searchGuides(guideSearchQuery, selectedLanguage)
         }
     }
 
-    val activeGuide = guides.firstOrNull { it.category == selectedCategory } ?: guides.firstOrNull()
+    val activeEmergencyGuide = filteredEmergencyGuides.firstOrNull { it.category == selectedCategory } ?: filteredEmergencyGuides.firstOrNull()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -418,7 +423,7 @@ fun OfflineGuidesDialog(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.MenuBook,
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = null,
                             tint = CyanTravel,
                             modifier = Modifier.size(24.dp)
@@ -444,15 +449,15 @@ fun OfflineGuidesDialog(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = if (selectedLang == GuideLanguage.FILIPINO) CyanTravel.copy(alpha = 0.2f) else NavySurface,
-                        border = BorderStroke(1.dp, if (selectedLang == GuideLanguage.FILIPINO) CyanTravel else NavyCardBorder),
+                        color = if (selectedLanguage == GuideLanguage.FILIPINO) CyanTravel.copy(alpha = 0.2f) else NavySurface,
+                        border = BorderStroke(1.dp, if (selectedLanguage == GuideLanguage.FILIPINO) CyanTravel else NavyCardBorder),
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedLang = GuideLanguage.FILIPINO }
+                            .clickable { selectedLanguage = GuideLanguage.FILIPINO }
                     ) {
                         Text(
                             text = "🇵🇭 Filipino (Tagalog)",
-                            color = if (selectedLang == GuideLanguage.FILIPINO) CyanTravel else TextMuted,
+                            color = if (selectedLanguage == GuideLanguage.FILIPINO) CyanTravel else TextMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -462,15 +467,15 @@ fun OfflineGuidesDialog(
 
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = if (selectedLang == GuideLanguage.ENGLISH) CyanTravel.copy(alpha = 0.2f) else NavySurface,
-                        border = BorderStroke(1.dp, if (selectedLang == GuideLanguage.ENGLISH) CyanTravel else NavyCardBorder),
+                        color = if (selectedLanguage == GuideLanguage.ENGLISH) CyanTravel.copy(alpha = 0.2f) else NavySurface,
+                        border = BorderStroke(1.dp, if (selectedLanguage == GuideLanguage.ENGLISH) CyanTravel else NavyCardBorder),
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedLang = GuideLanguage.ENGLISH }
+                            .clickable { selectedLanguage = GuideLanguage.ENGLISH }
                     ) {
                         Text(
                             text = "🇬🇧 English",
-                            color = if (selectedLang == GuideLanguage.ENGLISH) CyanTravel else TextMuted,
+                            color = if (selectedLanguage == GuideLanguage.ENGLISH) CyanTravel else TextMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -486,19 +491,19 @@ fun OfflineGuidesDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    GuideCategory.values().forEach { cat ->
-                        val isSelected = activeGuide?.category == cat
+                    GuideCategory.values().forEach { categoryItem ->
+                        val isCategorySelected = (activeEmergencyGuide?.category == categoryItem)
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) CrimsonPrimary.copy(alpha = 0.2f) else NavySurface,
-                            border = BorderStroke(1.dp, if (isSelected) CrimsonPrimary else NavyCardBorder),
-                            modifier = Modifier.clickable { selectedCategory = cat }
+                            color = if (isCategorySelected) CrimsonPrimary.copy(alpha = 0.2f) else NavySurface,
+                            border = BorderStroke(1.dp, if (isCategorySelected) CrimsonPrimary else NavyCardBorder),
+                            modifier = Modifier.clickable { selectedCategory = categoryItem }
                         ) {
                             Text(
-                                text = if (selectedLang == GuideLanguage.FILIPINO) cat.displayNameFil else cat.displayNameEn,
-                                color = if (isSelected) TextPearl else TextMuted,
+                                text = if (selectedLanguage == GuideLanguage.FILIPINO) categoryItem.displayNameFil else categoryItem.displayNameEn,
+                                color = if (isCategorySelected) TextPearl else TextMuted,
                                 fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = if (isCategorySelected) FontWeight.Bold else FontWeight.Normal,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
@@ -506,7 +511,7 @@ fun OfflineGuidesDialog(
                 }
 
                 // Guide Content Viewer
-                if (activeGuide != null) {
+                if (activeEmergencyGuide != null) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -514,14 +519,14 @@ fun OfflineGuidesDialog(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = activeGuide.title,
+                            text = activeEmergencyGuide.title,
                             color = TextPearl,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Black
                         )
 
                         Text(
-                            text = activeGuide.summary,
+                            text = activeEmergencyGuide.summary,
                             color = TextMuted,
                             fontSize = 12.sp,
                             lineHeight = 16.sp
@@ -546,7 +551,7 @@ fun OfflineGuidesDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Authoritative Source: ${activeGuide.authoritativeSource}",
+                                    text = "Authoritative Source: ${activeEmergencyGuide.authoritativeSource}",
                                     color = TextMuted,
                                     fontSize = 11.sp
                                 )
@@ -562,7 +567,7 @@ fun OfflineGuidesDialog(
                             letterSpacing = 0.5.sp
                         )
 
-                        activeGuide.steps.forEach { step ->
+                        activeEmergencyGuide.steps.forEach { guideStep ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = NavySurface,
@@ -581,7 +586,7 @@ fun OfflineGuidesDialog(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = step.stepNumber.toString(),
+                                            text = guideStep.stepNumber.toString(),
                                             color = EmeraldSafe,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold
@@ -590,59 +595,87 @@ fun OfflineGuidesDialog(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(
-                                            text = step.title,
+                                            text = guideStep.title,
                                             color = TextPearl,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = step.instruction,
+                                            text = guideStep.instruction,
                                             color = TextMuted,
                                             fontSize = 12.sp,
                                             lineHeight = 16.sp
                                         )
-                                        if (step.criticalAlert != null) {
-                                            Text(
-                                                text = "⚠️ ${step.criticalAlert}",
-                                                color = AmberWarning,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
+                                        if (!guideStep.criticalAlert.isNullOrBlank()) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = AmberWarning.copy(alpha = 0.15f),
+                                                border = BorderStroke(1.dp, AmberWarning.copy(alpha = 0.4f)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Warning,
+                                                        contentDescription = null,
+                                                        tint = AmberWarning,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = guideStep.criticalAlert,
+                                                        color = AmberWarning,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // What Not to Do
-                        if (activeGuide.whatNotToDo.isNotEmpty()) {
+                        // What NOT to do
+                        if (activeEmergencyGuide.whatNotToDo.isNotEmpty()) {
                             Text(
-                                text = "CRITICAL WARNINGS (WHAT NOT TO DO)",
+                                text = "CRITICAL: WHAT NOT TO DO",
                                 color = CrimsonGlow,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp
                             )
 
-                            activeGuide.whatNotToDo.forEach { warning ->
+                            activeEmergencyGuide.whatNotToDo.forEach { forbiddenActionText ->
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
-                                    color = CrimsonPrimary.copy(alpha = 0.1f),
+                                    color = CrimsonPrimary.copy(alpha = 0.12f),
                                     border = BorderStroke(1.dp, CrimsonPrimary.copy(alpha = 0.3f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = "⛔ $warning",
-                                        color = TextPearl,
-                                        fontSize = 11.sp,
-                                        lineHeight = 15.sp,
-                                        modifier = Modifier.padding(10.dp)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Block,
+                                            contentDescription = null,
+                                            tint = CrimsonGlow,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = forbiddenActionText,
+                                            color = TextPearl,
+                                            fontSize = 11.sp,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(10.dp))
                     }
                 }
             }
@@ -651,20 +684,16 @@ fun OfflineGuidesDialog(
 }
 
 // ==========================================
-// 3. READINESS CHECK & SIMULATION DIALOG
+// 3. READINESS CHECK & DIAGNOSTICS DIALOG
 // ==========================================
 
 @Composable
 fun ReadinessCheckDialog(
-    report: ReadinessReport?,
+    report: ReadinessReport,
     onRunDiagnostics: () -> Unit,
     onStartSimulation: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    LaunchedEffect(Unit) {
-        onRunDiagnostics()
-    }
-
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -691,14 +720,14 @@ fun ReadinessCheckDialog(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.FactCheck,
+                            imageVector = Icons.AutoMirrored.Filled.FactCheck,
                             contentDescription = null,
                             tint = AmberWarning,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "SYSTEM READINESS CHECK",
+                            text = "READINESS CHECK",
                             color = TextPearl,
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Black
@@ -710,55 +739,50 @@ fun ReadinessCheckDialog(
                     }
                 }
 
-                Text(
-                    text = "Performs deep diagnostics across hardware sensors, background services, telephony, and SMS pipelines to verify emergency readiness.",
-                    color = TextMuted,
-                    fontSize = 12.sp
-                )
-
-                // Overall status card
-                if (report != null) {
-                    val pass = report.overallPass
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (pass) EmeraldSafe.copy(alpha = 0.15f) else AmberWarning.copy(alpha = 0.15f),
-                        border = BorderStroke(1.dp, if (pass) EmeraldSafe else AmberWarning),
-                        modifier = Modifier.fillMaxWidth()
+                // Overall Status Banner
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (report.overallPass) EmeraldSafe.copy(alpha = 0.15f) else AmberWarning.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, if (report.overallPass) EmeraldSafe else AmberWarning),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (pass) Icons.Default.CheckCircle else Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = if (pass) EmeraldSafe else AmberWarning,
-                                modifier = Modifier.size(22.dp)
+                        Icon(
+                            imageVector = if (report.overallPass) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (report.overallPass) EmeraldSafe else AmberWarning,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (report.overallPass) "SYSTEM EMERGENCY READY" else "ATTENTION REQUIRED",
+                                color = if (report.overallPass) EmeraldSafe else AmberWarning,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = if (pass) "ALL CRITICAL SYSTEMS OPERATIONAL" else "SOME SUBSYSTEMS NEED ATTENTION",
-                                    color = if (pass) EmeraldSafe else AmberWarning,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${report.items.count { it.status == DiagnosticStatus.PASS }} of ${report.items.size} checks passed",
-                                    color = TextMuted,
-                                    fontSize = 11.sp
-                                )
-                            }
+                            Text(
+                                text = if (report.overallPass) {
+                                    "All sensors, GPS, telephony permissions, and contacts verified."
+                                } else {
+                                    "One or more emergency subsystems need configuration."
+                                },
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
                         }
                     }
                 }
 
-                // Diagnostics List
+                // Diagnostic Items List
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(report?.items ?: emptyList()) { item ->
+                    items(report.items) { diagnosticItem ->
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = NavySurface,
@@ -766,26 +790,38 @@ fun ReadinessCheckDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = item.name,
+                                        text = diagnosticItem.name,
                                         color = TextPearl,
-                                        fontSize = 12.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = item.detail,
+                                        text = diagnosticItem.detail,
                                         color = TextMuted,
-                                        fontSize = 11.sp
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp
                                     )
+                                    if (!diagnosticItem.remediation.isNullOrBlank()) {
+                                        Text(
+                                            text = "Fix: ${diagnosticItem.remediation}",
+                                            color = AmberWarning,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
                                 }
+
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
-                                    color = when (item.status) {
+                                    color = when (diagnosticItem.status) {
                                         DiagnosticStatus.PASS -> EmeraldSafe.copy(alpha = 0.2f)
                                         DiagnosticStatus.WARNING -> AmberWarning.copy(alpha = 0.2f)
                                         DiagnosticStatus.FAIL -> CrimsonPrimary.copy(alpha = 0.2f)
@@ -793,8 +829,8 @@ fun ReadinessCheckDialog(
                                     }
                                 ) {
                                     Text(
-                                        text = item.status.label,
-                                        color = when (item.status) {
+                                        text = diagnosticItem.status.label,
+                                        color = when (diagnosticItem.status) {
                                             DiagnosticStatus.PASS -> EmeraldSafe
                                             DiagnosticStatus.WARNING -> AmberWarning
                                             DiagnosticStatus.FAIL -> CrimsonGlow
@@ -925,7 +961,7 @@ fun IncidentLogsDialog(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(incidents) { inc ->
+                        items(incidents) { incidentItem ->
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = NavySurface,
@@ -942,18 +978,18 @@ fun IncidentLogsDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = inc.incidentId,
+                                            text = incidentItem.incidentId,
                                             color = TextPearl,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
-                                            color = if (inc.isSimulated) CyanTravel.copy(alpha = 0.2f) else CrimsonPrimary.copy(alpha = 0.2f)
+                                            color = if (incidentItem.isSimulated) CyanTravel.copy(alpha = 0.2f) else CrimsonPrimary.copy(alpha = 0.2f)
                                         ) {
                                             Text(
-                                                text = if (inc.isSimulated) "SIMULATION" else inc.finalState,
-                                                color = if (inc.isSimulated) CyanTravel else CrimsonGlow,
+                                                text = if (incidentItem.isSimulated) "SIMULATION" else incidentItem.finalState,
+                                                color = if (incidentItem.isSimulated) CyanTravel else CrimsonGlow,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -962,7 +998,7 @@ fun IncidentLogsDialog(
                                     }
 
                                     Text(
-                                        text = "Trigger: ${inc.triggerSource} • SMS Sent: ${inc.contactsSent}/${inc.contactsAttempted}",
+                                        text = "Trigger: ${incidentItem.triggerSource} • SMS Sent: ${incidentItem.contactsSent}/${incidentItem.contactsAttempted}",
                                         color = TextMuted,
                                         fontSize = 11.sp
                                     )
@@ -972,13 +1008,13 @@ fun IncidentLogsDialog(
                                         horizontalArrangement = Arrangement.End,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        TextButton(onClick = { onExportReport(inc) }) {
+                                        TextButton(onClick = { onExportReport(incidentItem) }) {
                                             Icon(Icons.Default.Share, contentDescription = null, tint = CyanTravel, modifier = Modifier.size(14.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Export", color = CyanTravel, fontSize = 11.sp)
                                         }
 
-                                        TextButton(onClick = { onDeleteIncident(inc.incidentId) }) {
+                                        TextButton(onClick = { onDeleteIncident(incidentItem.incidentId) }) {
                                             Icon(Icons.Default.Delete, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Delete", color = TextMuted, fontSize = 11.sp)

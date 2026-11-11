@@ -5,58 +5,75 @@ import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * Repository managing offline local storage for the Rescue Card.
- * Works completely offline without remote cloud synchronization.
+ * # RescueCardRepository
+ *
+ * Repository managing offline local storage for the user's emergency medical profile.
+ *
+ * Ordinary Human Overview:
+ * All medical information stored in the Rescue Card stays strictly on the physical device.
+ * No health data is ever transmitted to a cloud server, ensuring 100% privacy and complete
+ * offline availability even without a cellular network or Wi-Fi connection.
  */
 class RescueCardRepository(context: Context) {
 
     companion object {
-        private const val PREFS_NAME = "resqlink_rescue_card_prefs"
+        private const val PREFERENCES_FILE_NAME = "resqlink_rescue_card_prefs"
         private const val KEY_PROFILE_JSON = "rescue_card_profile_json"
 
         @Volatile
-        private var instance: RescueCardRepository? = null
+        private var singletonInstance: RescueCardRepository? = null
 
         fun getInstance(context: Context): RescueCardRepository {
-            return instance ?: synchronized(this) {
-                instance ?: RescueCardRepository(context.applicationContext).also { instance = it }
+            return singletonInstance ?: synchronized(this) {
+                singletonInstance ?: RescueCardRepository(context.applicationContext).also { singletonInstance = it }
             }
         }
     }
 
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val sharedPreferences: SharedPreferences =
+        context.getSharedPreferences(PREFERENCES_FILE_NAME, Context.MODE_PRIVATE)
 
-    private val json = Json {
+    private val jsonSerializer: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    private val _profile = MutableStateFlow(loadProfile())
+    private val _profile = MutableStateFlow(loadProfileFromDisk())
     val profile: StateFlow<RescueProfile> = _profile.asStateFlow()
 
-    private fun loadProfile(): RescueProfile {
-        val storedJson = prefs.getString(KEY_PROFILE_JSON, null)
-        if (!storedJson.isNullOrBlank()) {
+    /**
+     * Loads the saved Rescue Profile JSON from persistent storage.
+     * Returns an empty profile if no data exists or if parsing fails.
+     */
+    private fun loadProfileFromDisk(): RescueProfile {
+        val storedJsonString = sharedPreferences.getString(KEY_PROFILE_JSON, null)
+        if (!storedJsonString.isNullOrBlank()) {
             try {
-                return json.decodeFromString<RescueProfile>(storedJson)
-            } catch (e: Exception) {
-                // Fallback to default if corrupted
+                return jsonSerializer.decodeFromString<RescueProfile>(storedJsonString)
+            } catch (exception: Exception) {
+                // Fallback to default empty profile if JSON data is corrupted
             }
         }
         return RescueProfile()
     }
 
+    /**
+     * Saves the updated Rescue Profile to private disk storage and notifies UI observers.
+     */
     @Synchronized
     fun saveProfile(profile: RescueProfile) {
-        val serialized = json.encodeToString(profile)
-        prefs.edit().putString(KEY_PROFILE_JSON, serialized).apply()
+        val serializedJsonString = jsonSerializer.encodeToString(profile)
+        sharedPreferences.edit().putString(KEY_PROFILE_JSON, serializedJsonString).apply()
         _profile.value = profile
     }
 
+    /**
+     * Atomically toggles specific field visibility preferences without altering medical data.
+     */
     @Synchronized
     fun updateVisibility(
         isBloodTypeVisible: Boolean? = null,
@@ -67,22 +84,25 @@ class RescueCardRepository(context: Context) {
         isContactsVisible: Boolean? = null,
         isOrganDonorVisible: Boolean? = null
     ) {
-        val current = _profile.value
-        val updated = current.copy(
-            isBloodTypeVisible = isBloodTypeVisible ?: current.isBloodTypeVisible,
-            isAllergiesVisible = isAllergiesVisible ?: current.isAllergiesVisible,
-            isMedicationsVisible = isMedicationsVisible ?: current.isMedicationsVisible,
-            isConditionsVisible = isConditionsVisible ?: current.isConditionsVisible,
-            isInstructionsVisible = isInstructionsVisible ?: current.isInstructionsVisible,
-            isContactsVisible = isContactsVisible ?: current.isContactsVisible,
-            isOrganDonorVisible = isOrganDonorVisible ?: current.isOrganDonorVisible
+        val currentProfile = _profile.value
+        val updatedProfile = currentProfile.copy(
+            isBloodTypeVisible = isBloodTypeVisible ?: currentProfile.isBloodTypeVisible,
+            isAllergiesVisible = isAllergiesVisible ?: currentProfile.isAllergiesVisible,
+            isMedicationsVisible = isMedicationsVisible ?: currentProfile.isMedicationsVisible,
+            isConditionsVisible = isConditionsVisible ?: currentProfile.isConditionsVisible,
+            isInstructionsVisible = isInstructionsVisible ?: currentProfile.isInstructionsVisible,
+            isContactsVisible = isContactsVisible ?: currentProfile.isContactsVisible,
+            isOrganDonorVisible = isOrganDonorVisible ?: currentProfile.isOrganDonorVisible
         )
-        saveProfile(updated)
+        saveProfile(updatedProfile)
     }
 
+    /**
+     * Resets the Rescue Profile to a blank default state.
+     */
     @Synchronized
     fun resetToDefault() {
-        val defaultProfile = RescueProfile()
-        saveProfile(defaultProfile)
+        val defaultBlankProfile = RescueProfile()
+        saveProfile(defaultBlankProfile)
     }
 }

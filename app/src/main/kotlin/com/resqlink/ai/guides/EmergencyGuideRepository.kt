@@ -1,6 +1,8 @@
 package com.resqlink.ai.guides
 
 /**
+ * # EmergencyGuideRepository
+ *
  * 100% Offline Emergency Guide Repository containing bilingual (English & Filipino)
  * life-saving protocols verified against authoritative Philippine disaster & health agencies:
  * - Philippine Red Cross (PRC Hotline: 143 / 02-8527-0000)
@@ -8,10 +10,15 @@ package com.resqlink.ai.guides
  * - Bureau of Fire Protection (BFP Hotline: 02-8426-0219)
  * - PAGASA (Typhoon, Storm Surge, Flood advisories)
  * - Department of Health (DOH)
+ *
+ * Ordinary Human Overview:
+ * When cellular towers lose power during a typhoon or earthquake, you cannot Google first aid.
+ * This repository keeps complete, authoritative first-aid and disaster protocols directly
+ * in the app's offline binary, with fast instant-search in both English and Filipino.
  */
 object EmergencyGuideRepository {
 
-    private val cachedGuides: List<EmergencyGuide> by lazy {
+    private val cachedEmergencyGuidesList: List<EmergencyGuide> by lazy {
         listOf(
             // ==========================================
             // 1. CPR (ENGLISH)
@@ -349,23 +356,43 @@ object EmergencyGuideRepository {
         )
     }
 
-    fun getAllGuides(): List<EmergencyGuide> = cachedGuides
+    /**
+     * Returns all offline emergency guides across all categories and languages.
+     */
+    fun getAllGuides(): List<EmergencyGuide> = cachedEmergencyGuidesList
 
+    /**
+     * Filters guides matching a specific language preference (English or Filipino).
+     */
     fun getGuidesByLanguage(language: GuideLanguage): List<EmergencyGuide> {
-        return cachedGuides.filter { it.language == language }
+        return cachedEmergencyGuidesList.filter { it.language == language }
     }
 
+    /**
+     * Retrieves an individual guide by category and language.
+     */
     fun getGuidesByCategory(category: GuideCategory, language: GuideLanguage = GuideLanguage.ENGLISH): EmergencyGuide? {
-        return cachedGuides.firstOrNull { it.category == category && it.language == language }
+        return cachedEmergencyGuidesList.firstOrNull { it.category == category && it.language == language }
     }
 
+    /**
+     * Performs fast offline keyword search across guide titles, summaries, and instructional steps.
+     *
+     * @param query Search keywords entered by the user
+     * @param language Optional language filter (English or Filipino)
+     */
     fun searchGuides(query: String, language: GuideLanguage? = null): List<EmergencyGuide> {
-        val q = query.trim().lowercase()
-        return cachedGuides.filter { guide ->
-            (language == null || guide.language == language) &&
-                    (guide.title.lowercase().contains(q) ||
-                     guide.summary.lowercase().contains(q) ||
-                     guide.steps.any { it.title.lowercase().contains(q) || it.instruction.lowercase().contains(q) })
+        val cleanedSearchQuery = query.trim().lowercase()
+        return cachedEmergencyGuidesList.filter { emergencyGuide ->
+            val isLanguageMatching = (language == null || emergencyGuide.language == language)
+            val isTitleMatching = emergencyGuide.title.lowercase().contains(cleanedSearchQuery)
+            val isSummaryMatching = emergencyGuide.summary.lowercase().contains(cleanedSearchQuery)
+            val isStepInstructionMatching = emergencyGuide.steps.any { step ->
+                step.title.lowercase().contains(cleanedSearchQuery) ||
+                        step.instruction.lowercase().contains(cleanedSearchQuery)
+            }
+
+            isLanguageMatching && (isTitleMatching || isSummaryMatching || isStepInstructionMatching)
         }
     }
 }

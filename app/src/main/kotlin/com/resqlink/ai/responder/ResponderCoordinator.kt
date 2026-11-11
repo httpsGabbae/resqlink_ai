@@ -17,86 +17,109 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Coordinator for Responder Mode. Exposes safety-critical incident and medical information
- * to first responders, medical personnel, and Good Samaritans.
- * Public emergency calls are strictly user/responder-initiated.
+ * # ResponderCoordinator
+ *
+ * Coordinates and formats real-time emergency telemetry for first responders and rescuers.
+ *
+ * Ordinary Human Overview:
+ * When someone discovers an accident victim, every second counts.
+ * This class observes the active emergency incident and the user's Rescue Card, combining them
+ * into a single clean [ResponderState] that powers the Responder Assistance screen.
+ *
+ * Safety Invariant:
+ * Public emergency calls are strictly user- or responder-initiated via [openDialer].
+ * The application never silently dials 911 on its own.
  */
 class ResponderCoordinator(
     private val context: Context,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
+    private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
     private val emergencyEventManager = EmergencyEventManager.getInstance()
     private val rescueCardRepository = RescueCardRepository.getInstance(context)
 
-    private val _responderState = MutableStateFlow(buildState(null, rescueCardRepository.profile.value))
+    private val _responderState = MutableStateFlow(
+        buildResponderState(
+            activeIncident = null,
+            rescueProfile = rescueCardRepository.profile.value
+        )
+    )
     val responderState: StateFlow<ResponderState> = _responderState.asStateFlow()
 
     init {
-        scope.launch {
-            emergencyEventManager.currentIncident.collect { incident ->
-                refreshState(incident, rescueCardRepository.profile.value)
+        // Observe changes to the current emergency incident
+        coroutineScope.launch {
+            emergencyEventManager.currentIncident.collect { activeIncident ->
+                refreshResponderState(activeIncident, rescueCardRepository.profile.value)
             }
         }
-        scope.launch {
-            rescueCardRepository.profile.collect { profile ->
-                refreshState(emergencyEventManager.currentIncident.value, profile)
+        // Observe changes to the user's medical profile
+        coroutineScope.launch {
+            rescueCardRepository.profile.collect { updatedProfile ->
+                refreshResponderState(emergencyEventManager.currentIncident.value, updatedProfile)
             }
         }
     }
 
-    private fun refreshState(incident: EmergencyIncident?, profile: RescueProfile) {
-        _responderState.value = buildState(incident, profile)
+    private fun refreshResponderState(activeIncident: EmergencyIncident?, rescueProfile: RescueProfile) {
+        _responderState.value = buildResponderState(activeIncident, rescueProfile)
     }
 
-    private fun buildState(incident: EmergencyIncident?, profile: RescueProfile): ResponderState {
-        val now = System.currentTimeMillis()
-        val startTime = incident?.startTimeMillis ?: 0L
-        val elapsedSec = if (startTime > 0) (now - startTime) / 1000L else 0L
+    /**
+     * Synthesizes incident telemetry, location age, and medical records into a clean UI state.
+     */
+    private fun buildResponderState(
+        activeIncident: EmergencyIncident?,
+        rescueProfile: RescueProfile
+    ): ResponderState {
+        val currentTimestamp = System.currentTimeMillis()
+        val incidentStartTimeMillis = activeIncident?.startTimeMillis ?: 0L
+        val elapsedSeconds = if (incidentStartTimeMillis > 0) (currentTimestamp - incidentStartTimeMillis) / 1000L else 0L
 
-        val loc = incident?.location
-        val locAgeSec = loc?.let { (now - it.timestamp) / 1000L }
-        val isStale = locAgeSec != null && locAgeSec > 300 // Older than 5 minutes
+        val incidentLocation = activeIncident?.location
+        val locationAgeSeconds = incidentLocation?.let { (currentTimestamp - it.timestamp) / 1000L }
+        val isLocationStale = locationAgeSeconds != null && locationAgeSeconds > 300 // Flag stale if older than 5 minutes
 
-        val alertMsg = when {
-            incident == null -> "Standby - No active emergency"
-            incident.contactAlertsSent > 0 -> "Dispatched: ${incident.contactAlertsSent} contacts notified via SMS"
-            incident.contactAlertsAttempted > 0 -> "Alerts in progress (${incident.contactAlertsAttempted} attempted)"
-            incident.state == IncidentLifecycleState.AWAITING_CONFIRMATION -> "Awaiting user countdown confirmation"
+        val alertStatusMessage = when {
+            activeIncident == null -> "Standby - No active emergency"
+            activeIncident.contactAlertsSent > 0 -> "Dispatched: ${activeIncident.contactAlertsSent} contacts notified via SMS"
+            activeIncident.contactAlertsAttempted > 0 -> "Alerts in progress (${activeIncident.contactAlertsAttempted} attempted)"
+            activeIncident.state == IncidentLifecycleState.AWAITING_CONFIRMATION -> "Awaiting user countdown confirmation"
             else -> "No contact alerts dispatched yet"
         }
 
         return ResponderState(
-            activeIncidentId = incident?.incidentId,
-            lifecycleState = incident?.state ?: IncidentLifecycleState.IDLE,
-            triggerSourceDescription = incident?.triggerSource?.displayName ?: "Standby",
-            incidentStartTimeMillis = startTime,
-            elapsedSeconds = elapsedSec,
-            currentLocation = loc,
-            locationAgeSeconds = locAgeSec,
-            isLocationStale = isStale,
-            sanitizedRescueProfile = profile,
-            emergencySummaryText = profile.toSanitizedEmergencySummary(),
-            qrPayload = profile.toQrPayload(),
-            contactAlertsSentCount = incident?.contactAlertsSent ?: 0,
-            contactAlertsAttemptedCount = incident?.contactAlertsAttempted ?: 0,
-            contactAlertStatusMessage = alertMsg,
-            primaryContactName = profile.primaryContactName.ifBlank { null },
-            primaryContactNumber = profile.primaryContactPhone.ifBlank { null }
+            activeIncidentId = activeIncident?.incidentId,
+            lifecycleState = activeIncident?.state ?: IncidentLifecycleState.IDLE,
+            triggerSourceDescription = activeIncident?.triggerSource?.displayName ?: "Standby",
+            incidentStartTimeMillis = incidentStartTimeMillis,
+            elapsedSeconds = elapsedSeconds,
+            currentLocation = incidentLocation,
+            locationAgeSeconds = locationAgeSeconds,
+            isLocationStale = isLocationStale,
+            sanitizedRescueProfile = rescueProfile,
+            emergencySummaryText = rescueProfile.toSanitizedEmergencySummary(),
+            qrPayload = rescueProfile.toQrPayload(),
+            contactAlertsSentCount = activeIncident?.contactAlertsSent ?: 0,
+            contactAlertsAttemptedCount = activeIncident?.contactAlertsAttempted ?: 0,
+            contactAlertStatusMessage = alertStatusMessage,
+            primaryContactName = rescueProfile.primaryContactName.ifBlank { null },
+            primaryContactNumber = rescueProfile.primaryContactPhone.ifBlank { null }
         )
     }
 
     /**
-     * User/responder initiated dial action. Never dials automatically without human interaction.
+     * Opens the Android system dialer pad with the requested emergency number.
+     * Requires explicit physical touch by the human rescuer.
      */
     fun openDialer(phoneNumber: String) {
         try {
-            val intent = Intent(Intent.ACTION_DIAL).apply {
+            val dialerIntent = Intent(Intent.ACTION_DIAL).apply {
                 data = Uri.parse("tel:$phoneNumber")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            // Dialer unavailable
+            context.startActivity(dialerIntent)
+        } catch (launchException: Exception) {
+            // Android dialer activity unavailable
         }
     }
 }

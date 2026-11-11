@@ -35,6 +35,15 @@ import com.resqlink.ai.ui.map.MapScreen
 import com.resqlink.ai.ui.settings.SettingsScreen
 import com.resqlink.ai.ui.theme.ResQLinkAITheme
 
+/**
+ * # ResQTab
+ *
+ * Bottom navigation destinations for ResQLink AI:
+ * - [SOS]: The primary emergency cockpit, manual SOS triggers, and safe travel status.
+ * - [MAP]: Offline 5km spatial radius radar and interactive station map.
+ * - [DIRECTORY]: Verified Philippine police, fire, hospital, and barangay emergency hotlines.
+ * - [CONTACTS]: In-Case-of-Emergency (ICE) family contact directory.
+ */
 enum class ResQTab(val title: String, val icon: ImageVector) {
     SOS("Emergency", Icons.Default.Warning),
     MAP("5km Map", Icons.Default.Map),
@@ -42,13 +51,29 @@ enum class ResQTab(val title: String, val icon: ImageVector) {
     CONTACTS("Contacts", Icons.Default.ContactPhone)
 }
 
+/**
+ * # MainActivity
+ *
+ * Main application window entry point for ResQLink AI.
+ *
+ * Ordinary Human Overview:
+ * When danger occurs or you cry out for help, seconds count.
+ * This Activity:
+ * 1. **Wakes Over Lockscreen**: Uses `setShowWhenLocked` and `setTurnScreenOn` so if your hands
+ *    are pinned or you are in an accident, the emergency interface lights up immediately.
+ * 2. **Requests Essential Safety Permissions**: Microphone (hands-free listening), GPS (5km defense radius),
+ *    SMS (dispatching family alerts), and Phone (placing 911 calls).
+ * 3. **Handles Incoming Hardware Alarms**: Intercepts emergency notification intents and voice wake events.
+ * 4. **Coordinates Edge-to-Edge Jetpack Compose Navigation**: Smooth transitions between login, dashboard tabs,
+ *    settings, and offline maps.
+ */
 class MainActivity : ComponentActivity() {
 
     private val emergencyViewModel: EmergencyViewModel by viewModels()
 
-    private val permissionLauncher = registerForActivityResult(
+    private val multiplePermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
+    ) { grantedPermissionsMap ->
         // Permissions evaluated
         emergencyViewModel.refreshLocation()
         checkAndStartGuardianService()
@@ -70,8 +95,8 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        requestAppPermissions()
-        handleIncomingIntent(intent)
+        requestRequiredPermissions()
+        processIncomingIntent(intent)
 
         // Schedule 2-hour periodic background hotline AI discovery
         com.resqlink.ai.service.HotlineSyncWorker.schedulePeriodicSync(applicationContext)
@@ -80,11 +105,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             ResQLinkAITheme {
                 val userProfile by emergencyViewModel.userProfile.collectAsState()
-                var currentScreen by remember { mutableStateOf(AppScreen.TABS) }
+                var currentActiveScreen by remember { mutableStateOf(AppScreen.TABS) }
                 var targetSettingsSubSection by remember { mutableStateOf(com.resqlink.ai.ui.settings.SettingsSubSection.NONE) }
 
                 AnimatedContent(
-                    targetState = userProfile.isLoggedIn to currentScreen,
+                    targetState = userProfile.isLoggedIn to currentActiveScreen,
                     transitionSpec = {
                         if (!initialState.first && targetState.first) {
                             // Login -> Dashboard
@@ -100,8 +125,8 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     label = "screenTransition"
-                ) { (isLoggedIn, screen) ->
-                    if (!isLoggedIn) {
+                ) { (isUserLoggedIn, activeScreen) ->
+                    if (!isUserLoggedIn) {
                         LoginScreen(
                             onGoogleSignInClick = {
                                 emergencyViewModel.signInWithGoogle(
@@ -114,29 +139,29 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else {
-                        when (screen) {
+                        when (activeScreen) {
                             AppScreen.SETTINGS -> {
                                 SettingsScreen(
                                     viewModel = emergencyViewModel,
-                                    onBack = { currentScreen = AppScreen.TABS },
+                                    onBack = { currentActiveScreen = AppScreen.TABS },
                                     initialSubSection = targetSettingsSubSection
                                 )
                             }
                             AppScreen.MAP -> {
                                 MapScreen(
                                     viewModel = emergencyViewModel,
-                                    onBack = { currentScreen = AppScreen.TABS }
+                                    onBack = { currentActiveScreen = AppScreen.TABS }
                                 )
                             }
                             AppScreen.TABS -> {
                                 MainAppScaffold(
                                     viewModel = emergencyViewModel,
-                                    onOpenSettings = { sub ->
-                                        targetSettingsSubSection = sub
-                                        currentScreen = AppScreen.SETTINGS
+                                    onOpenSettings = { subSection ->
+                                        targetSettingsSubSection = subSection
+                                        currentActiveScreen = AppScreen.SETTINGS
                                     },
                                     onOpenMap = {
-                                        currentScreen = AppScreen.MAP
+                                        currentActiveScreen = AppScreen.MAP
                                     }
                                 )
                             }
@@ -154,19 +179,19 @@ class MainActivity : ComponentActivity() {
 
     private fun checkAndStartGuardianService() {
         if (emergencyViewModel.isGuardianModeEnabled()) {
-            val hasAudio = ContextCompat.checkSelfPermission(
+            val hasAudioRecordingPermission = ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
             ) == PackageManager.PERMISSION_GRANTED
 
-            if (hasAudio && !GuardianForegroundService.isRunning) {
-                val intent = Intent(this, GuardianForegroundService::class.java).apply {
+            if (hasAudioRecordingPermission && !GuardianForegroundService.isRunning) {
+                val serviceIntent = Intent(this, GuardianForegroundService::class.java).apply {
                     action = GuardianForegroundService.ACTION_START
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
+                    startForegroundService(serviceIntent)
                 } else {
-                    startService(intent)
+                    startService(serviceIntent)
                 }
             }
         }
@@ -175,31 +200,31 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleIncomingIntent(intent)
+        processIncomingIntent(intent)
     }
 
-    private fun handleIncomingIntent(intent: Intent?) {
-        if (intent == null) return
+    private fun processIncomingIntent(incomingIntent: Intent?) {
+        if (incomingIntent == null) return
 
-        if (intent.getBooleanExtra(GuardianForegroundService.EXTRA_CONFIRM_IMMEDIATELY, false)) {
+        if (incomingIntent.getBooleanExtra(GuardianForegroundService.EXTRA_CONFIRM_IMMEDIATELY, false)) {
             GuardianForegroundService.dismissEmergencyDistressPopup(this)
             emergencyViewModel.confirmEmergency("Emergency Confirmed via Notification")
             return
         }
 
-        if (intent.getBooleanExtra(GuardianForegroundService.EXTRA_EMERGENCY_DETECTED, false)) {
-            val phrase = intent.getStringExtra(GuardianForegroundService.EXTRA_KEYWORD_LABEL) ?: "Distress Voice"
-            if (phrase.equals("Cancel", ignoreCase = true)) {
+        if (incomingIntent.getBooleanExtra(GuardianForegroundService.EXTRA_EMERGENCY_DETECTED, false)) {
+            val spokenDistressPhrase = incomingIntent.getStringExtra(GuardianForegroundService.EXTRA_KEYWORD_LABEL) ?: "Distress Voice"
+            if (spokenDistressPhrase.equals("Cancel", ignoreCase = true)) {
                 GuardianForegroundService.dismissEmergencyDistressPopup(this)
                 emergencyViewModel.cancelSos()
             } else {
-                emergencyViewModel.onVoiceDistressDetected(phrase)
+                emergencyViewModel.onVoiceDistressDetected(spokenDistressPhrase)
             }
         }
     }
 
-    private fun requestAppPermissions() {
-        val permissions = mutableListOf(
+    private fun requestRequiredPermissions() {
+        val permissionsList = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -209,15 +234,15 @@ class MainActivity : ComponentActivity() {
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissionsList.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        val ungranted = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        val ungrantedPermissions = permissionsList.filter { permission ->
+            ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (ungranted.isNotEmpty()) {
-            permissionLauncher.launch(ungranted.toTypedArray())
+        if (ungrantedPermissions.isNotEmpty()) {
+            multiplePermissionsLauncher.launch(ungrantedPermissions.toTypedArray())
         }
     }
 }
@@ -234,12 +259,12 @@ fun MainAppScaffold(
     onOpenSettings: (com.resqlink.ai.ui.settings.SettingsSubSection) -> Unit,
     onOpenMap: () -> Unit
 ) {
-    var selectedTab by remember { mutableStateOf(ResQTab.SOS) }
+    var currentlySelectedTab by remember { mutableStateOf(ResQTab.SOS) }
 
     // Intercept physical phone back button or swipe-to-back gesture
     // When on Hotlines or Contacts tabs, back brings user to the main SOS dashboard tab instead of exiting the app
-    BackHandler(enabled = selectedTab != ResQTab.SOS) {
-        selectedTab = ResQTab.SOS
+    BackHandler(enabled = currentlySelectedTab != ResQTab.SOS) {
+        currentlySelectedTab = ResQTab.SOS
     }
 
     Scaffold(
@@ -250,15 +275,15 @@ fun MainAppScaffold(
                 containerColor = NavySurface,
                 contentColor = TextPearl
             ) {
-                ResQTab.values().forEach { tab ->
+                ResQTab.values().forEach { tabItem ->
                     NavigationBarItem(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        icon = { Icon(tab.icon, contentDescription = tab.title) },
+                        selected = currentlySelectedTab == tabItem,
+                        onClick = { currentlySelectedTab = tabItem },
+                        icon = { Icon(tabItem.icon, contentDescription = tabItem.title) },
                         label = {
                             Text(
-                                tab.title,
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal,
+                                tabItem.title,
+                                fontWeight = if (currentlySelectedTab == tabItem) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 11.sp
                             )
                         },
@@ -273,22 +298,22 @@ fun MainAppScaffold(
                 }
             }
         }
-    ) { innerPadding ->
+    ) { innerPaddingValues ->
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPaddingValues),
             color = NavyBackground
         ) {
-            when (selectedTab) {
+            when (currentlySelectedTab) {
                 ResQTab.SOS -> HomeScreen(
                     viewModel = viewModel,
                     onOpenSettings = onOpenSettings,
-                    onOpenMap = { selectedTab = ResQTab.MAP }
+                    onOpenMap = { currentlySelectedTab = ResQTab.MAP }
                 )
                 ResQTab.MAP -> MapScreen(
                     viewModel = viewModel,
-                    onBack = { selectedTab = ResQTab.SOS }
+                    onBack = { currentlySelectedTab = ResQTab.SOS }
                 )
                 ResQTab.DIRECTORY -> DirectoryScreen(viewModel = viewModel)
                 ResQTab.CONTACTS -> ContactsScreen(viewModel = viewModel)

@@ -4,7 +4,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -30,8 +28,19 @@ val CyanTravel = Color(0xFF38BDF8)
 val CyanTravelDark = Color(0xFF0284C7)
 
 /**
+ * # SafeTravelCard
+ *
  * Prominent Safe Travel (Safety Journey) Card on the HomeScreen.
  * Provides instant visibility and control over personal safety check-in sessions.
+ *
+ * Ordinary Human Overview:
+ * When you walk home late at night or take a cab alone:
+ * - In **Idle State**: Allows you to pick a preset (e.g. "Heading Home", "Grab / Taxi") and set
+ *   a travel timer (15, 30, 45, 60 mins).
+ * - In **Active State**: Displays a real-time countdown timer, "+15 MINS" extension button, and
+ *   a large "I'M SAFE" check-in button.
+ * - In **Overdue State (Grace Period)**: Pulses in amber warning colors to warn you that an emergency
+ *   SMS with your live GPS location will be dispatched to your family if you don't check in.
  */
 @Composable
 fun SafeTravelCard(
@@ -42,7 +51,7 @@ fun SafeTravelCard(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isRunning = journey != null && (journey.status == JourneyStatus.ACTIVE || journey.status == JourneyStatus.GRACE_PERIOD)
+    val isJourneyRunning = journey != null && (journey.status == JourneyStatus.ACTIVE || journey.status == JourneyStatus.GRACE_PERIOD)
 
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -51,7 +60,7 @@ fun SafeTravelCard(
             1.5.dp,
             when {
                 journey?.status == JourneyStatus.GRACE_PERIOD -> AmberWarning
-                isRunning -> EmeraldSafe
+                isJourneyRunning -> EmeraldSafe
                 else -> NavyCardBorder
             }
         ),
@@ -63,7 +72,7 @@ fun SafeTravelCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (isRunning && journey != null) {
+            if (journey != null && isJourneyRunning) {
                 ActiveJourneyContent(
                     journey = journey,
                     onCheckInSafe = onCheckInSafe,
@@ -83,10 +92,10 @@ fun SafeTravelCard(
 private fun IdleJourneyContent(
     onStartJourney: (destination: String, minutes: Int, notes: String) -> Unit
 ) {
-    var destination by remember { mutableStateOf("Heading Home") }
-    var selectedMinutes by remember { mutableStateOf(30) }
-    val presets = listOf("Heading Home", "Commute / Transit", "Walking Alone", "Grab / Taxi")
-    val durationOptions = listOf(15, 30, 45, 60)
+    var selectedDestinationPreset by remember { mutableStateOf("Heading Home") }
+    var selectedDurationMinutes by remember { mutableStateOf(30) }
+    val travelPresetsList = listOf("Heading Home", "Commute / Transit", "Walking Alone", "Grab / Taxi")
+    val durationMinuteOptions = listOf(15, 30, 45, 60)
 
     // Header row
     Row(
@@ -161,21 +170,21 @@ private fun IdleJourneyContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            presets.take(3).forEach { preset ->
-                val isSelected = destination == preset
+            travelPresetsList.take(3).forEach { presetItem ->
+                val isPresetSelected = (selectedDestinationPreset == presetItem)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (isSelected) CyanTravel.copy(alpha = 0.2f) else NavySurface,
-                    border = BorderStroke(1.dp, if (isSelected) CyanTravel else NavyCardBorder),
+                    color = if (isPresetSelected) CyanTravel.copy(alpha = 0.2f) else NavySurface,
+                    border = BorderStroke(1.dp, if (isPresetSelected) CyanTravel else NavyCardBorder),
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { destination = preset }
+                        .clickable { selectedDestinationPreset = presetItem }
                 ) {
                     Text(
-                        text = preset,
-                        color = if (isSelected) TextPearl else TextMuted,
+                        text = presetItem,
+                        color = if (isPresetSelected) TextPearl else TextMuted,
                         fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = if (isPresetSelected) FontWeight.Bold else FontWeight.Normal,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
@@ -198,21 +207,21 @@ private fun IdleJourneyContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            durationOptions.forEach { mins ->
-                val isSelected = selectedMinutes == mins
+            durationMinuteOptions.forEach { minutesOption ->
+                val isDurationSelected = (selectedDurationMinutes == minutesOption)
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (isSelected) EmeraldSafe.copy(alpha = 0.2f) else NavySurface,
-                    border = BorderStroke(1.dp, if (isSelected) EmeraldSafe else NavyCardBorder),
+                    color = if (isDurationSelected) EmeraldSafe.copy(alpha = 0.2f) else NavySurface,
+                    border = BorderStroke(1.dp, if (isDurationSelected) EmeraldSafe else NavyCardBorder),
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { selectedMinutes = mins }
+                        .clickable { selectedDurationMinutes = minutesOption }
                 ) {
                     Text(
-                        text = if (mins >= 60) "${mins / 60} hr" else "$mins m",
-                        color = if (isSelected) EmeraldSafe else TextMuted,
+                        text = if (minutesOption >= 60) "${minutesOption / 60} hr" else "$minutesOption m",
+                        color = if (isDurationSelected) EmeraldSafe else TextMuted,
                         fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = if (isDurationSelected) FontWeight.Bold else FontWeight.Normal,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
@@ -223,7 +232,7 @@ private fun IdleJourneyContent(
 
     // Start Button
     Button(
-        onClick = { onStartJourney(destination, selectedMinutes, "") },
+        onClick = { onStartJourney(selectedDestinationPreset, selectedDurationMinutes, "") },
         colors = ButtonDefaults.buttonColors(containerColor = CyanTravelDark),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
@@ -238,7 +247,7 @@ private fun IdleJourneyContent(
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = "START SAFE TRAVEL ($selectedMinutes MINS)",
+            text = "START SAFE TRAVEL ($selectedDurationMinutes MINS)",
             color = Color.White,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
@@ -254,29 +263,29 @@ private fun ActiveJourneyContent(
     onExtend15m: () -> Unit,
     onCancel: () -> Unit
 ) {
-    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    var currentTimestampMillis by remember { mutableStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(journey.id) {
         while (true) {
             delay(1000L)
-            currentTime = System.currentTimeMillis()
+            currentTimestampMillis = System.currentTimeMillis()
         }
     }
 
-    val isGracePeriod = journey.status == JourneyStatus.GRACE_PERIOD || (currentTime > journey.deadlineMillis && currentTime <= journey.graceDeadlineMillis)
-    val remainingMillis = if (isGracePeriod) {
-        (journey.graceDeadlineMillis - currentTime).coerceAtLeast(0L)
+    val isGracePeriodActive = journey.status == JourneyStatus.GRACE_PERIOD || (currentTimestampMillis > journey.deadlineMillis && currentTimestampMillis <= journey.graceDeadlineMillis)
+    val remainingCountdownMillis = if (isGracePeriodActive) {
+        (journey.graceDeadlineMillis - currentTimestampMillis).coerceAtLeast(0L)
     } else {
-        (journey.deadlineMillis - currentTime).coerceAtLeast(0L)
+        (journey.deadlineMillis - currentTimestampMillis).coerceAtLeast(0L)
     }
 
-    val minutes = (remainingMillis / 1000L) / 60
-    val seconds = (remainingMillis / 1000L) % 60
-    val formattedTime = String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
+    val remainingMinutes = (remainingCountdownMillis / 1000L) / 60
+    val remainingSeconds = (remainingCountdownMillis / 1000L) % 60
+    val formattedTime = String.format(java.util.Locale.US, "%02d:%02d", remainingMinutes, remainingSeconds)
 
     // Pulsing animation
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alphaAnim by infiniteTransition.animateFloat(
+    val pulsingAlphaAnimation by infiniteTransition.animateFloat(
         initialValue = 0.4f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
@@ -298,14 +307,14 @@ private fun ActiveJourneyContent(
                     .size(12.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isGracePeriod) AmberWarning.copy(alpha = alphaAnim)
-                        else EmeraldSafe.copy(alpha = alphaAnim)
+                        if (isGracePeriodActive) AmberWarning.copy(alpha = pulsingAlphaAnimation)
+                        else EmeraldSafe.copy(alpha = pulsingAlphaAnimation)
                     )
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (isGracePeriod) "CHECK-IN OVERDUE!" else "SAFE TRAVEL ACTIVE",
-                color = if (isGracePeriod) AmberWarning else EmeraldSafe,
+                text = if (isGracePeriodActive) "CHECK-IN OVERDUE!" else "SAFE TRAVEL ACTIVE",
+                color = if (isGracePeriodActive) AmberWarning else EmeraldSafe,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 0.5.sp
@@ -314,12 +323,12 @@ private fun ActiveJourneyContent(
 
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = if (isGracePeriod) AmberWarning.copy(alpha = 0.15f) else EmeraldSafe.copy(alpha = 0.15f),
-            border = BorderStroke(1.dp, if (isGracePeriod) AmberWarning else EmeraldSafe)
+            color = if (isGracePeriodActive) AmberWarning.copy(alpha = 0.15f) else EmeraldSafe.copy(alpha = 0.15f),
+            border = BorderStroke(1.dp, if (isGracePeriodActive) AmberWarning else EmeraldSafe)
         ) {
             Text(
-                text = if (isGracePeriod) "GRACE: $formattedTime" else formattedTime,
-                color = if (isGracePeriod) AmberWarning else EmeraldSafe,
+                text = if (isGracePeriodActive) "GRACE: $formattedTime" else formattedTime,
+                color = if (isGracePeriodActive) AmberWarning else EmeraldSafe,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -353,7 +362,7 @@ private fun ActiveJourneyContent(
             }
         }
 
-        if (isGracePeriod) {
+        if (isGracePeriodActive) {
             Text(
                 text = "⚠️ Please confirm you are safe. If no response in $formattedTime, emergency SMS with your live GPS coordinates will be sent to your trusted contacts.",
                 color = AmberWarning,
@@ -373,7 +382,7 @@ private fun ActiveJourneyContent(
     Button(
         onClick = onCheckInSafe,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isGracePeriod) AmberWarning else EmeraldSafe
+            containerColor = if (isGracePeriodActive) AmberWarning else EmeraldSafe
         ),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier

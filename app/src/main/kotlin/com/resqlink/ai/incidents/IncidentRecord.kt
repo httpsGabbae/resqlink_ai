@@ -1,13 +1,19 @@
 package com.resqlink.ai.incidents
 
-import com.resqlink.ai.domain.model.LocationSnapshot
-import com.resqlink.ai.emergency.EmergencyTriggerSource
-import com.resqlink.ai.emergency.IncidentLifecycleState
 import kotlinx.serialization.Serializable
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * # IncidentTimelineEntry
+ *
+ * Represents an individual milestone or state change in an emergency incident timeline.
+ *
+ * @property timestampMillis Exact epoch millisecond when this milestone occurred
+ * @property stage Short machine tag for the stage (e.g., "TRIGGER", "GPS_LOCK", "SMS_DISPATCH")
+ * @property message Human-readable explanation of what the system did
+ */
 @Serializable
 data class IncidentTimelineEntry(
     val timestampMillis: Long,
@@ -15,6 +21,22 @@ data class IncidentTimelineEntry(
     val message: String
 )
 
+/**
+ * # IncidentRecord
+ *
+ * Immutable data model capturing the complete post-incident audit trail of an emergency event.
+ *
+ * Ordinary Human Overview:
+ * When an emergency occurs—or when a user performs a safe dry-run simulation—it is critical
+ * to know exactly what happened, when it happened, which family members were alerted,
+ * and what GPS coordinates were broadcast.
+ *
+ * This record:
+ * 1. Stores complete telemetry (trigger source, voice phrase detected, duration, coordinates, accuracy).
+ * 2. Distinguishes live emergencies from test simulations via [isSimulated].
+ * 3. Keeps an exact chronological event log ([timeline]) for medical or forensic review.
+ * 4. Generates formatted text summaries ready for export, sharing, or email.
+ */
 @Serializable
 data class IncidentRecord(
     val incidentId: String,
@@ -33,51 +55,62 @@ data class IncidentRecord(
     val timeline: List<IncidentTimelineEntry> = emptyList(),
     val notes: String? = null
 ) {
+    /**
+     * Total elapsed duration of the incident in whole seconds.
+     */
     val durationSeconds: Long
-        get() = ((resolvedTimeMillis ?: System.currentTimeMillis()) - startTimeMillis) / 1000L
+        get() {
+            val endTimeMillis = resolvedTimeMillis ?: System.currentTimeMillis()
+            return (endTimeMillis - startTimeMillis) / 1000L
+        }
 
+    /**
+     * Formats the incident record into an ASCII-bordered, human-readable report.
+     */
     fun toFormattedText(): String {
-        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.US)
-        val sb = StringBuilder()
-        sb.appendLine("==================================================")
-        sb.appendLine("             RESQLINK INCIDENT REPORT             ")
-        sb.appendLine("==================================================")
-        sb.appendLine("Incident ID    : $incidentId")
-        sb.appendLine("Trigger Source : $triggerSource")
+        val fullDateTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.US)
+        val shortTimeFormatter = SimpleDateFormat("HH:mm:ss", Locale.US)
+        val reportBuilder = StringBuilder()
+
+        reportBuilder.appendLine("==================================================")
+        reportBuilder.appendLine("             RESQLINK INCIDENT REPORT             ")
+        reportBuilder.appendLine("==================================================")
+        reportBuilder.appendLine("Incident ID    : $incidentId")
+        reportBuilder.appendLine("Trigger Source : $triggerSource")
         if (!initialDetectedPhrase.isNullOrBlank()) {
-            sb.appendLine("Detected Phrase: \"$initialDetectedPhrase\"")
+            reportBuilder.appendLine("Detected Phrase: \"$initialDetectedPhrase\"")
         }
-        sb.appendLine("Final Status   : $finalState")
-        sb.appendLine("Simulation Mode: ${if (isSimulated) "YES (Safe Dry-Run)" else "NO (Live Emergency)"}")
-        sb.appendLine("Start Time     : ${sdf.format(Date(startTimeMillis))}")
-        resolvedTimeMillis?.let {
-            sb.appendLine("End/Resolution : ${sdf.format(Date(it))}")
+        reportBuilder.appendLine("Final Status   : $finalState")
+        reportBuilder.appendLine("Simulation Mode: ${if (isSimulated) "YES (Safe Dry-Run)" else "NO (Live Emergency)"}")
+        reportBuilder.appendLine("Start Time     : ${fullDateTimeFormatter.format(Date(startTimeMillis))}")
+        resolvedTimeMillis?.let { resolvedTimestamp ->
+            reportBuilder.appendLine("End/Resolution : ${fullDateTimeFormatter.format(Date(resolvedTimestamp))}")
         }
-        sb.appendLine("Duration       : ${durationSeconds}s")
-        sb.appendLine("--------------------------------------------------")
-        sb.appendLine("GEOLOCATION")
+        reportBuilder.appendLine("Duration       : ${durationSeconds}s")
+        reportBuilder.appendLine("--------------------------------------------------")
+        reportBuilder.appendLine("GEOLOCATION")
         if (latitude != null && longitude != null) {
-            sb.appendLine("Coordinates    : $latitude, $longitude")
-            sb.appendLine("Accuracy       : ~${locationAccuracyMeters?.toInt() ?: "?"} meters")
-            sb.appendLine("Map Link       : https://maps.google.com/?q=$latitude,$longitude")
+            reportBuilder.appendLine("Coordinates    : $latitude, $longitude")
+            reportBuilder.appendLine("Accuracy       : ~${locationAccuracyMeters?.toInt() ?: "?"} meters")
+            reportBuilder.appendLine("Map Link       : https://maps.google.com/?q=$latitude,$longitude")
         } else {
-            sb.appendLine("Coordinates    : Not Available / Unavailable at time of incident")
+            reportBuilder.appendLine("Coordinates    : Not Available / Unavailable at time of incident")
         }
-        sb.appendLine("--------------------------------------------------")
-        sb.appendLine("DISPATCH & ESCALATION")
-        sb.appendLine("SMS Sent       : $contactsSent / $contactsAttempted contact(s)")
-        sb.appendLine("Hotline Call   : ${if (emergencyCallInitiated) "User-Initiated Call Launched" else "No Emergency Call Launched"}")
-        sb.appendLine("--------------------------------------------------")
-        sb.appendLine("CHRONOLOGICAL EVENT TIMELINE")
+        reportBuilder.appendLine("--------------------------------------------------")
+        reportBuilder.appendLine("DISPATCH & ESCALATION")
+        reportBuilder.appendLine("SMS Sent       : $contactsSent / $contactsAttempted contact(s)")
+        reportBuilder.appendLine("Hotline Call   : ${if (emergencyCallInitiated) "User-Initiated Call Launched" else "No Emergency Call Launched"}")
+        reportBuilder.appendLine("--------------------------------------------------")
+        reportBuilder.appendLine("CHRONOLOGICAL EVENT TIMELINE")
         if (timeline.isEmpty()) {
-            sb.appendLine(" No intermediate timeline events recorded.")
+            reportBuilder.appendLine(" No intermediate timeline events recorded.")
         } else {
-            for (entry in timeline) {
-                val timeStr = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date(entry.timestampMillis))
-                sb.appendLine(" [$timeStr] [${entry.stage}] ${entry.message}")
+            for (timelineEntry in timeline) {
+                val timeString = shortTimeFormatter.format(Date(timelineEntry.timestampMillis))
+                reportBuilder.appendLine(" [$timeString] [${timelineEntry.stage}] ${timelineEntry.message}")
             }
         }
-        sb.appendLine("==================================================")
-        return sb.toString()
+        reportBuilder.appendLine("==================================================")
+        return reportBuilder.toString()
     }
 }

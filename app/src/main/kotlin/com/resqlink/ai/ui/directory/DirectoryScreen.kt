@@ -35,37 +35,62 @@ import com.resqlink.ai.ui.emergency.*
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * =========================================================================================
+ * DIRECTORY SCREEN
+ * =========================================================================================
+ * Educational Overview:
+ * This screen displays the emergency telephone directory for ResQLink AI. It serves two main
+ * safety purposes:
+ *
+ * 1. NATIONAL HOTLINES BANNER:
+ *    Displays verified Philippine national emergency contact numbers derived from official
+ *    public safety references (e.g. Kaya Natin PH):
+ *    - 911: National Emergency Hotline (Police, Fire, Medical dispatch)
+ *    - 117: Philippine National Police (PNP)
+ *    - 143 or (02) 8527-0000: Philippine Red Cross
+ *    - 165-02: Department of Public Works and Highways (DPWH - Road hazards & flooding)
+ *
+ * 2. 5KM LOCAL EMERGENCY STATIONS:
+ *    Displays nearby barangay halls, municipal police stations, fire stations (BFP), and
+ *    hospitals within a 5-kilometer radius of the user's current GPS location.
+ *
+ * All telephone calls initiated from this screen are user-confirmed and user-initiated.
+ * =========================================================================================
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DirectoryScreen(
     viewModel: EmergencyViewModel,
     modifier: Modifier = Modifier
 ) {
-    val allHotlines by viewModel.allHotlines.collectAsState()
-    val nearestHotlines by viewModel.nearestHotlines.collectAsState()
-    val isAiScanning by viewModel.isAiScanning.collectAsState()
-    val lastScanTime by viewModel.lastAiScanTime.collectAsState()
-    val currentLocation by viewModel.currentLocation.collectAsState()
+    // Collect reactive state flows from the ViewModel
+    val allHotlinesList by viewModel.allHotlines.collectAsState()
+    val nearestHotlinesList by viewModel.nearestHotlines.collectAsState()
+    val isAiScanningActive by viewModel.isAiScanning.collectAsState()
+    val lastScanTimestampMillis by viewModel.lastAiScanTime.collectAsState()
+    val currentDeviceLocation by viewModel.currentLocation.collectAsState()
 
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf<HotlineCategory?>(null) }
+    // Local UI state for searching and filtering by category
+    var textSearchQuery by remember { mutableStateOf("") }
+    var selectedFilterCategory by remember { mutableStateOf<HotlineCategory?>(null) }
 
-    // Prefer 5km nearest hotlines if available, otherwise full directory
-    val filteredList = remember(allHotlines, nearestHotlines, searchQuery, selectedCategory) {
-        val baseList = if (searchQuery.isBlank() && selectedCategory == null && nearestHotlines.isNotEmpty()) {
-            nearestHotlines
+    // Prioritize 5km nearest stations if available; fall back to the complete directory
+    val filteredHotlinesList = remember(allHotlinesList, nearestHotlinesList, textSearchQuery, selectedFilterCategory) {
+        val baseHotlinesList = if (textSearchQuery.isBlank() && selectedFilterCategory == null && nearestHotlinesList.isNotEmpty()) {
+            nearestHotlinesList
         } else {
-            allHotlines
+            allHotlinesList
         }
 
-        baseList.filter { hotline ->
-            val matchesCategory = selectedCategory == null || hotline.category == selectedCategory
-            val matchesSearch = searchQuery.isBlank() ||
-                    hotline.name.contains(searchQuery, ignoreCase = true) ||
-                    hotline.cityMunicipality.contains(searchQuery, ignoreCase = true) ||
-                    hotline.province.contains(searchQuery, ignoreCase = true) ||
-                    hotline.primaryNumber.contains(searchQuery)
-            matchesCategory && matchesSearch
+        baseHotlinesList.filter { hotline ->
+            val matchesCategory = selectedFilterCategory == null || hotline.category == selectedFilterCategory
+            val matchesSearchText = textSearchQuery.isBlank() ||
+                    hotline.name.contains(textSearchQuery, ignoreCase = true) ||
+                    hotline.cityMunicipality.contains(textSearchQuery, ignoreCase = true) ||
+                    hotline.province.contains(textSearchQuery, ignoreCase = true) ||
+                    hotline.primaryNumber.contains(textSearchQuery)
+            matchesCategory && matchesSearchText
         }.sortedWith(
             compareByDescending<Hotline> { it.isPinned }
                 .thenBy { it.distanceKm ?: Double.MAX_VALUE }
@@ -82,7 +107,7 @@ fun DirectoryScreen(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
-            // Header
+            // Header: Screen title, current approximate locality, and sync badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -97,7 +122,7 @@ fun DirectoryScreen(
                         letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = currentLocation?.address?.let { "Near $it" } ?: "Philippine local emergency stations within 5km",
+                        text = currentDeviceLocation?.address?.let { "Near $it" } ?: "Philippine local emergency stations within 5km",
                         fontSize = 11.sp,
                         color = TextMuted,
                         maxLines = 1,
@@ -124,22 +149,22 @@ fun DirectoryScreen(
 
             // AI Hotline Scanner Action Card
             AiScannerControlCard(
-                isScanning = isAiScanning,
-                lastScanTime = lastScanTime,
+                isScanning = isAiScanningActive,
+                lastScanTime = lastScanTimestampMillis,
                 onTriggerScan = { viewModel.triggerAiHotlineScan() }
             )
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Search Bar
+            // Search Bar for quick name or location lookup
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+                value = textSearchQuery,
+                onValueChange = { textSearchQuery = it },
                 placeholder = { Text("Search barangay, police, hospital...", color = TextMuted, fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
                 trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                    if (textSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { textSearchQuery = "" }) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextMuted)
                         }
                     }
@@ -161,7 +186,7 @@ fun DirectoryScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Category Filter Chips
+            // Category Filter Chips (Barangay, Police, Hospital, DRRMO, Fire)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -171,40 +196,40 @@ fun DirectoryScreen(
             ) {
                 CategoryChip(
                     title = "All (5km)",
-                    selected = selectedCategory == null,
-                    onClick = { selectedCategory = null }
+                    selected = selectedFilterCategory == null,
+                    onClick = { selectedFilterCategory = null }
                 )
                 CategoryChip(
                     title = "Barangay",
-                    selected = selectedCategory == HotlineCategory.BARANGAY,
-                    onClick = { selectedCategory = if (selectedCategory == HotlineCategory.BARANGAY) null else HotlineCategory.BARANGAY }
+                    selected = selectedFilterCategory == HotlineCategory.BARANGAY,
+                    onClick = { selectedFilterCategory = if (selectedFilterCategory == HotlineCategory.BARANGAY) null else HotlineCategory.BARANGAY }
                 )
                 CategoryChip(
                     title = "Police (PNP)",
-                    selected = selectedCategory == HotlineCategory.POLICE_PNP,
-                    onClick = { selectedCategory = if (selectedCategory == HotlineCategory.POLICE_PNP) null else HotlineCategory.POLICE_PNP }
+                    selected = selectedFilterCategory == HotlineCategory.POLICE_PNP,
+                    onClick = { selectedFilterCategory = if (selectedFilterCategory == HotlineCategory.POLICE_PNP) null else HotlineCategory.POLICE_PNP }
                 )
                 CategoryChip(
                     title = "Hospital / ER",
-                    selected = selectedCategory == HotlineCategory.MEDICAL_HOSPITAL,
-                    onClick = { selectedCategory = if (selectedCategory == HotlineCategory.MEDICAL_HOSPITAL) null else HotlineCategory.MEDICAL_HOSPITAL }
+                    selected = selectedFilterCategory == HotlineCategory.MEDICAL_HOSPITAL,
+                    onClick = { selectedFilterCategory = if (selectedFilterCategory == HotlineCategory.MEDICAL_HOSPITAL) null else HotlineCategory.MEDICAL_HOSPITAL }
                 )
                 CategoryChip(
                     title = "DRRMO",
-                    selected = selectedCategory == HotlineCategory.DISASTER_DRRMO,
-                    onClick = { selectedCategory = if (selectedCategory == HotlineCategory.DISASTER_DRRMO) null else HotlineCategory.DISASTER_DRRMO }
+                    selected = selectedFilterCategory == HotlineCategory.DISASTER_DRRMO,
+                    onClick = { selectedFilterCategory = if (selectedFilterCategory == HotlineCategory.DISASTER_DRRMO) null else HotlineCategory.DISASTER_DRRMO }
                 )
                 CategoryChip(
                     title = "Fire (BFP)",
-                    selected = selectedCategory == HotlineCategory.FIRE_BFP,
-                    onClick = { selectedCategory = if (selectedCategory == HotlineCategory.FIRE_BFP) null else HotlineCategory.FIRE_BFP }
+                    selected = selectedFilterCategory == HotlineCategory.FIRE_BFP,
+                    onClick = { selectedFilterCategory = if (selectedFilterCategory == HotlineCategory.FIRE_BFP) null else HotlineCategory.FIRE_BFP }
                 )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Discovered Hotlines List
-            if (filteredList.isEmpty()) {
+            // Render discovered station list or an informative empty state
+            if (filteredHotlinesList.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -238,15 +263,16 @@ fun DirectoryScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
-                    if (searchQuery.isBlank() && selectedCategory == null) {
+                    // When no query is typed, pin the Philippine National Emergency Hotlines Card at the top
+                    if (textSearchQuery.isBlank() && selectedFilterCategory == null) {
                         item(key = "national_hotlines_banner") {
                             NationalEmergencyHotlinesCard(
-                                onCall = { number -> viewModel.directCallHotline(number) }
+                                onCall = { targetPhoneNumber -> viewModel.directCallHotline(targetPhoneNumber) }
                             )
                         }
                     }
 
-                    items(filteredList, key = { it.id }) { hotline ->
+                    items(filteredHotlinesList, key = { it.id }) { hotline ->
                         HotlineCard(
                             hotline = hotline,
                             onCall = { viewModel.dialHotlineDirectly(hotline) },
@@ -259,14 +285,18 @@ fun DirectoryScreen(
     }
 }
 
+/**
+ * AI Scanner Control Card provides an on-demand button to trigger a 5km spatial scan
+ * using Gemini 3.1 Flash-Lite to discover verified local responder facilities.
+ */
 @Composable
 fun AiScannerControlCard(
     isScanning: Boolean,
     lastScanTime: Long,
     onTriggerScan: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "aiScanPulse")
-    val rotation by infiniteTransition.animateFloat(
+    val radarTransition = rememberInfiniteTransition(label = "aiScanPulse")
+    val radarSweepAngle by radarTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
@@ -307,7 +337,7 @@ fun AiScannerControlCard(
                         tint = if (isScanning) CrimsonGlow else EmeraldSafe,
                         modifier = Modifier
                             .size(22.dp)
-                            .then(if (isScanning) Modifier.rotate(rotation) else Modifier)
+                            .then(if (isScanning) Modifier.rotate(radarSweepAngle) else Modifier)
                     )
                 }
 
@@ -356,6 +386,9 @@ fun AiScannerControlCard(
     }
 }
 
+/**
+ * Filter chip for categorizing hotlines by emergency department.
+ */
 @Composable
 fun CategoryChip(
     title: String,
@@ -382,13 +415,17 @@ fun CategoryChip(
     )
 }
 
+/**
+ * Individual Hotline Card displaying station name, distance in kilometers,
+ * jurisdiction, and direct call button.
+ */
 @Composable
 fun HotlineCard(
     hotline: Hotline,
     onCall: () -> Unit,
     onTogglePin: () -> Unit
 ) {
-    val categoryColor = when (hotline.category) {
+    val categoryAccentColor = when (hotline.category) {
         HotlineCategory.BARANGAY -> EmeraldSafe
         HotlineCategory.POLICE_PNP -> Color(0xFF3B82F6) // Police Blue
         HotlineCategory.MEDICAL_HOSPITAL -> CrimsonPrimary // Hospital Red
@@ -420,7 +457,7 @@ fun HotlineCard(
                 .fillMaxWidth()
                 .padding(14.dp)
         ) {
-            // Pinned indicator badge
+            // Pinned indicator badge if user selected this station as primary target
             if (hotline.isPinned) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -448,12 +485,12 @@ fun HotlineCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Category badge
+                // Category badge & distance indicator
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = categoryColor.copy(alpha = 0.15f),
-                        border = BorderStroke(0.5.dp, categoryColor)
+                        color = categoryAccentColor.copy(alpha = 0.15f),
+                        border = BorderStroke(0.5.dp, categoryAccentColor)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -462,20 +499,20 @@ fun HotlineCard(
                             Icon(
                                 imageVector = categoryIcon,
                                 contentDescription = null,
-                                tint = categoryColor,
+                                tint = categoryAccentColor,
                                 modifier = Modifier.size(11.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = hotline.category.displayName,
-                                color = categoryColor,
+                                color = categoryAccentColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    hotline.distanceKm?.let { distance ->
+                    hotline.distanceKm?.let { distanceInKm ->
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(6.dp),
@@ -483,7 +520,7 @@ fun HotlineCard(
                             border = BorderStroke(0.5.dp, NavyCardBorder)
                         ) {
                             Text(
-                                text = "${distance}km away",
+                                text = "${distanceInKm}km away",
                                 color = TextPearl,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Medium,
@@ -499,7 +536,7 @@ fun HotlineCard(
                     modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
-                        imageVector = if (hotline.isPinned) Icons.Default.PushPin else Icons.Default.PushPin,
+                        imageVector = Icons.Default.PushPin,
                         contentDescription = "Pin as Primary",
                         tint = if (hotline.isPinned) AmberWarning else TextMuted.copy(alpha = 0.5f),
                         modifier = Modifier.size(18.dp)
@@ -518,7 +555,7 @@ fun HotlineCard(
                 lineHeight = 19.sp
             )
 
-            // Address / Jurisdiction
+            // Address / Geographic Jurisdiction
             Text(
                 text = "${hotline.cityMunicipality}, ${hotline.province}",
                 fontSize = 12.sp,
@@ -542,9 +579,9 @@ fun HotlineCard(
                         fontSize = 14.sp,
                         letterSpacing = 0.5.sp
                     )
-                    hotline.alternateNumber?.let { alt ->
+                    hotline.alternateNumber?.let { alternatePhoneNumber ->
                         Text(
-                            text = "Alt: $alt",
+                            text = "Alt: $alternatePhoneNumber",
                             fontSize = 11.sp,
                             color = TextMuted
                         )
@@ -566,20 +603,34 @@ fun HotlineCard(
     }
 }
 
-private fun formatLastScan(timestamp: Long): String {
-    if (timestamp == 0L) return "Tap Scan AI to discover stations"
-    val diffMs = System.currentTimeMillis() - timestamp
-    val mins = diffMs / (1000 * 60)
+/**
+ * Helper to display human-friendly elapsed time since the last AI discovery scan.
+ */
+private fun formatLastScan(timestampMillis: Long): String {
+    if (timestampMillis == 0L) return "Tap Scan AI to discover stations"
+    val elapsedMillis = System.currentTimeMillis() - timestampMillis
+    val elapsedMinutes = elapsedMillis / (1000 * 60)
     return when {
-        mins < 1 -> "Last scanned: Just now"
-        mins < 60 -> "Last scanned: ${mins}m ago"
+        elapsedMinutes < 1 -> "Last scanned: Just now"
+        elapsedMinutes < 60 -> "Last scanned: ${elapsedMinutes}m ago"
         else -> {
-            val hours = mins / 60
-            "Last scanned: ${hours}h ago"
+            val elapsedHours = elapsedMinutes / 60
+            "Last scanned: ${elapsedHours}h ago"
         }
     }
 }
 
+/**
+ * =========================================================================================
+ * PHILIPPINE NATIONAL EMERGENCY HOTLINES CARD
+ * =========================================================================================
+ * Formatted exactly according to official Philippine public safety guidelines:
+ * 1. National Emergency Hotline: 911
+ * 2. Philippine National Police: 117
+ * 3. Philippine Red Cross: 143 or 8527-000 (02-8527-0000)
+ * 4. DPWH (Road emergencies): 165-02
+ * =========================================================================================
+ */
 @Composable
 fun NationalEmergencyHotlinesCard(
     onCall: (String) -> Unit
@@ -655,7 +706,7 @@ fun NationalEmergencyHotlinesCard(
                     onCallAlt = { onCall("0285270000") }
                 )
 
-                // 4. DPWH: 165-02
+                // 4. DPWH (Public Works & Roads): 165-02
                 NationalHotlineRow(
                     title = "DPWH (PUBLIC WORKS & ROADS)",
                     number = "165-02",
@@ -687,6 +738,9 @@ fun NationalEmergencyHotlinesCard(
     }
 }
 
+/**
+ * Compact row item for a National Emergency Hotline with primary and landline buttons.
+ */
 @Composable
 private fun NationalHotlineRow(
     title: String,

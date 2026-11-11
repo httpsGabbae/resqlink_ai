@@ -19,6 +19,24 @@ import com.resqlink.ai.ai.KeywordSpotter
 import com.resqlink.ai.ai.VadDetector
 import kotlinx.coroutines.*
 
+/**
+ * # GuardianForegroundService
+ *
+ * Android Foreground Service managing persistent, hands-free offline microphone monitoring.
+ *
+ * Ordinary Human Overview:
+ * When you walk through a dark alley or return home late at night, you can toggle "Guardian Mode" ON.
+ *
+ * This background service:
+ * 1. Shows a persistent Android notification indicating the phone is actively protecting you.
+ * 2. Holds a foreground microphone lock (`FOREGROUND_SERVICE_TYPE_MICROPHONE`) so Android OS
+ *    does not terminate audio recording when the screen turns off.
+ * 3. Runs a two-stage detection pipeline:
+ *    - Continuous Tagalog/English speech recognition ([GuardianSpeechRecognizer]).
+ *    - Offline acoustic VAD + TFLite neural keyword spotter ([AudioStreamRecorder]).
+ * 4. When distress is heard ("Resqlink Tulong!", "Tulong!", "Help!"), it immediately launches
+ *    a high-priority full-screen alarm notification and starts a 10-second countdown to alert family.
+ */
 class GuardianForegroundService : Service() {
 
     companion object {
@@ -33,41 +51,42 @@ class GuardianForegroundService : Service() {
         const val EXTRA_KEYWORD_LABEL = "EXTRA_KEYWORD_LABEL"
         const val EXTRA_CONFIRM_IMMEDIATELY = "EXTRA_CONFIRM_IMMEDIATELY"
 
-        var isRunning = false
+        var isRunning: Boolean = false
             private set
 
+        /**
+         * Dismisses the active full-screen distress alert popup notification.
+         */
         fun dismissEmergencyDistressPopup(context: Context) {
             try {
-                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                manager.cancel(EMERGENCY_POPUP_NOTIFICATION_ID)
-            } catch (e: Exception) {
-                // Ignore
-            }
+                val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.cancel(EMERGENCY_POPUP_NOTIFICATION_ID)
+            } catch (ignored: Exception) {}
         }
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private lateinit var vadDetector: VadDetector
+    private val serviceCoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private lateinit var voiceActivityDetector: VadDetector
     private lateinit var keywordSpotter: KeywordSpotter
-    private lateinit var audioRecorder: AudioStreamRecorder
-    private var speechRecognizer: GuardianSpeechRecognizer? = null
+    private lateinit var audioStreamRecorder: AudioStreamRecorder
+    private var guardianSpeechRecognizer: GuardianSpeechRecognizer? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
 
-        vadDetector = VadDetector()
+        voiceActivityDetector = VadDetector()
         keywordSpotter = KeywordSpotter(this)
-        audioRecorder = AudioStreamRecorder(vadDetector, keywordSpotter)
+        audioStreamRecorder = AudioStreamRecorder(voiceActivityDetector, keywordSpotter)
 
-        speechRecognizer = GuardianSpeechRecognizer(this) { keyword, phrase ->
-            handleDistressDetected(keyword, phrase)
+        guardianSpeechRecognizer = GuardianSpeechRecognizer(this) { detectedKeyword, detectedPhrase ->
+            handleDistressTrigger(detectedKeyword, detectedPhrase)
         }
 
-        // Observe acoustic fallback detection events
-        serviceScope.launch {
-            audioRecorder.detectionEvents.collect { result ->
-                handleDistressDetected(result.keyword, result.keyword.label)
+        // Observe acoustic fallback detection events from the TFLite neural network
+        serviceCoroutineScope.launch {
+            audioStreamRecorder.detectionEvents.collect { detectionResult ->
+                handleDistressTrigger(detectionResult.keyword, detectionResult.keyword.label)
             }
         }
     }
@@ -88,36 +107,38 @@ class GuardianForegroundService : Service() {
 
     private fun startGuardianMode() {
         isRunning = true
-        val notification = buildForegroundNotification()
+        val foregroundStatusNotification = buildForegroundServiceNotification()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
-                notification,
+                foregroundStatusNotification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
         } else {
-            startForeground(NOTIFICATION_ID, notification)
+            startForeground(NOTIFICATION_ID, foregroundStatusNotification)
         }
 
-        speechRecognizer?.startListening()
-        audioRecorder.startMonitoring(serviceScope)
+        guardianSpeechRecognizer?.startListening()
+        audioStreamRecorder.startMonitoring(serviceCoroutineScope)
     }
 
     private fun stopGuardianMode() {
         isRunning = false
         dismissEmergencyDistressPopup(this)
-        speechRecognizer?.stopListening()
-        audioRecorder.stopMonitoring()
+        guardianSpeechRecognizer?.stopListening()
+        audioStreamRecorder.stopMonitoring()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
-    private fun handleDistressDetected(keyword: com.resqlink.ai.ai.DistressKeyword, phrase: String) {
+    /**
+     * Responds to detected voice distress keywords or hands-free cancel commands.
+     */
+    private fun handleDistressTrigger(keyword: com.resqlink.ai.ai.DistressKeyword, phrase: String) {
         if (keyword == com.resqlink.ai.ai.DistressKeyword.CANCEL) {
             dismissEmergencyDistressPopup(this)
             val cancelIntent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_EMERGENCY_DETECTED, true)
                 putExtra(EXTRA_KEYWORD_LABEL, "Cancel")
             }
@@ -126,30 +147,30 @@ class GuardianForegroundService : Service() {
         }
 
         if (keyword.isEmergency) {
-            val detectedPhrase = phrase.ifBlank { keyword.label }
-            showEmergencyDistressPopup(detectedPhrase)
-            triggerEmergencyLockscreenAlert(detectedPhrase)
+            val detectedPhraseText = phrase.ifBlank { keyword.label }
+            displayEmergencyDistressPopup(detectedPhraseText)
+            launchEmergencyLockscreenActivity(detectedPhraseText)
         }
     }
 
-    private fun buildForegroundNotification(): Notification {
+    private fun buildForegroundServiceNotification(): Notification {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val pendingOpenApp = PendingIntent.getActivity(
+        val pendingOpenAppIntent = PendingIntent.getActivity(
             this,
             0,
             openAppIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val stopIntent = Intent(this, GuardianForegroundService::class.java).apply {
+        val stopServiceIntent = Intent(this, GuardianForegroundService::class.java).apply {
             action = ACTION_STOP
         }
-        val pendingStop = PendingIntent.getService(
+        val pendingStopServiceIntent = PendingIntent.getService(
             this,
             1,
-            stopIntent,
+            stopServiceIntent,
             PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -159,8 +180,8 @@ class GuardianForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setContentIntent(pendingOpenApp)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Turn Off", pendingStop)
+            .setContentIntent(pendingOpenAppIntent)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Turn Off", pendingStopServiceIntent)
             .build()
     }
 
@@ -168,7 +189,7 @@ class GuardianForegroundService : Service() {
      * High-Priority Heads-Up Pop-Up Notification with vibration, alarm sound,
      * full-screen intent, and actionable CANCEL & CALL NOW controls.
      */
-    private fun showEmergencyDistressPopup(phrase: String) {
+    private fun displayEmergencyDistressPopup(phrase: String) {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -176,42 +197,42 @@ class GuardianForegroundService : Service() {
             putExtra(EXTRA_EMERGENCY_DETECTED, true)
             putExtra(EXTRA_KEYWORD_LABEL, phrase)
         }
-        val pendingOpenApp = PendingIntent.getActivity(
+        val pendingOpenAppIntent = PendingIntent.getActivity(
             this,
             1001,
             openAppIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val cancelIntent = Intent(this, MainActivity::class.java).apply {
+        val cancelEmergencyIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_EMERGENCY_DETECTED, true)
             putExtra(EXTRA_KEYWORD_LABEL, "Cancel")
         }
-        val pendingCancel = PendingIntent.getActivity(
+        val pendingCancelIntent = PendingIntent.getActivity(
             this,
             1002,
-            cancelIntent,
+            cancelEmergencyIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val confirmIntent = Intent(this, MainActivity::class.java).apply {
+        val immediateConfirmIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_EMERGENCY_DETECTED, true)
             putExtra(EXTRA_CONFIRM_IMMEDIATELY, true)
         }
-        val pendingConfirm = PendingIntent.getActivity(
+        val pendingConfirmIntent = PendingIntent.getActivity(
             this,
             1003,
-            confirmIntent,
+            immediateConfirmIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val vibrationPattern = longArrayOf(0, 800, 400, 800, 400)
-        val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        val alarmVibrationPattern = longArrayOf(0, 800, 400, 800, 400)
+        val alarmSoundRingtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
 
-        val popupNotification = NotificationCompat.Builder(this, EMERGENCY_POPUP_CHANNEL_ID)
+        val popupDistressNotification = NotificationCompat.Builder(this, EMERGENCY_POPUP_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("🚨 EMERGENCY DISTRESS DETECTED")
             .setContentText("Keyword: \"$phrase\" • 10s Countdown to Dispatch")
@@ -224,22 +245,22 @@ class GuardianForegroundService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setVibrate(vibrationPattern)
-            .setSound(alarmSound)
-            .setContentIntent(pendingOpenApp)
-            .setFullScreenIntent(pendingOpenApp, true)
+            .setVibrate(alarmVibrationPattern)
+            .setSound(alarmSoundRingtoneUri)
+            .setContentIntent(pendingOpenAppIntent)
+            .setFullScreenIntent(pendingOpenAppIntent, true)
             .setAutoCancel(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "CANCEL", pendingCancel)
-            .addAction(android.R.drawable.ic_menu_call, "CALL NOW", pendingConfirm)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "CANCEL", pendingCancelIntent)
+            .addAction(android.R.drawable.ic_menu_call, "CALL NOW", pendingConfirmIntent)
             .build()
 
-        popupNotification.flags = popupNotification.flags or Notification.FLAG_INSISTENT
+        popupDistressNotification.flags = popupDistressNotification.flags or Notification.FLAG_INSISTENT
 
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(EMERGENCY_POPUP_NOTIFICATION_ID, popupNotification)
+        val systemNotificationManager = getSystemService(NotificationManager::class.java)
+        systemNotificationManager.notify(EMERGENCY_POPUP_NOTIFICATION_ID, popupDistressNotification)
     }
 
-    private fun triggerEmergencyLockscreenAlert(keywordLabel: String) {
+    private fun launchEmergencyLockscreenActivity(keywordLabel: String) {
         val emergencyIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -252,20 +273,20 @@ class GuardianForegroundService : Service() {
 
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
+            val systemNotificationManager = getSystemService(NotificationManager::class.java)
 
             // 1. Ongoing Guardian Mode Service Channel (Low importance)
-            val serviceChannel = NotificationChannel(
+            val serviceNotificationChannel = NotificationChannel(
                 CHANNEL_ID,
                 "ResQLink Guardian Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Persistent indicator that offline voice distress detection is active."
             }
-            manager.createNotificationChannel(serviceChannel)
+            systemNotificationManager.createNotificationChannel(serviceNotificationChannel)
 
             // 2. High-Priority Emergency Pop-Up Alert Channel (Heads-Up display)
-            val popupChannel = NotificationChannel(
+            val popupDistressNotificationChannel = NotificationChannel(
                 EMERGENCY_POPUP_CHANNEL_ID,
                 "Emergency Distress Alerts",
                 NotificationManager.IMPORTANCE_HIGH
@@ -275,25 +296,25 @@ class GuardianForegroundService : Service() {
                 vibrationPattern = longArrayOf(0, 800, 400, 800, 400)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setBypassDnd(true)
-                val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                val alarmSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                     ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
                 val audioAttributes = AudioAttributes.Builder()
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .build()
-                setSound(alarmSound, audioAttributes)
+                setSound(alarmSoundUri, audioAttributes)
             }
-            manager.createNotificationChannel(popupChannel)
+            systemNotificationManager.createNotificationChannel(popupDistressNotificationChannel)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         stopGuardianMode()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        guardianSpeechRecognizer?.destroy()
+        guardianSpeechRecognizer = null
         keywordSpotter.close()
-        serviceScope.cancel()
+        serviceCoroutineScope.cancel()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
