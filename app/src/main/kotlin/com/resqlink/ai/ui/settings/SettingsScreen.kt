@@ -271,10 +271,19 @@ fun SettingsScreen(
 
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 // 0: Emergency Call Routing & Dual-SIM
+                                val callRoutingSummary = when (userProfileData.callPriority) {
+                                    CallPriority.LOCAL_HOTLINE -> "Nearest Local Station First"
+                                    CallPriority.UNIVERSAL_911 -> "Universal 911 First"
+                                    CallPriority.FAMILY_FIRST -> {
+                                        val contactName = userProfileData.primaryContactName.ifBlank { "Primary Contact" }
+                                        val contactPhone = userProfileData.primaryContactPhone
+                                        if (contactPhone.isNotBlank()) "Call $contactName ($contactPhone)" else "Call $contactName"
+                                    }
+                                }
                                 SettingsMenuItem(
                                     icon = Icons.AutoMirrored.Filled.PhoneCallback,
                                     title = "Emergency Call Routing & Dual-SIM",
-                                    subtitle = "${userProfileData.callPriority.title} • ${userProfileData.simPreference.title}",
+                                    subtitle = "$callRoutingSummary • ${userProfileData.simPreference.title}",
                                     badge = "Dual-SIM",
                                     badgeColor = CrimsonGlow,
                                     onClick = { activeSettingsSubSection = SettingsSubSection.CALL_PRIORITY }
@@ -641,12 +650,22 @@ fun CallPrioritySubSectionView(
                     onClick = { onSelectPriority(CallPriority.UNIVERSAL_911) }
                 )
 
-                // Option 3: Family / ICE Contact First
+                // Option 3: Primary Contact / ICE First
+                val contactOptionTitle = if (primaryContactName.isNotBlank()) {
+                    "Call $primaryContactName First"
+                } else {
+                    "Primary Emergency Contact First"
+                }
+                val contactOptionDesc = if (primaryContactName.isNotBlank()) {
+                    "Directly auto-calls your designated contact: $primaryContactName."
+                } else {
+                    "Directly auto-calls your designated primary emergency contact."
+                }
                 CallPriorityOptionCard(
-                    title = "Family / ICE Contact First",
-                    description = "Directly auto-calls your primary contact: $primaryContactName.",
+                    title = contactOptionTitle,
+                    description = contactOptionDesc,
                     isSelected = currentPriority == CallPriority.FAMILY_FIRST,
-                    badge = "Personal",
+                    badge = if (primaryContactName.isNotBlank()) primaryContactName else "Contact",
                     onClick = { onSelectPriority(CallPriority.FAMILY_FIRST) }
                 )
             }

@@ -283,7 +283,12 @@ fun HomeScreen(
                             )
                             Text(
                                 text = when (userProfile.callPriority) {
-                                    com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> "1st: Family (${userProfile.primaryContactName}) • ${userProfile.simPreference.title}"
+                                    com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> {
+                                        val contactName = userProfile.primaryContactName.ifBlank { "Emergency Contact" }
+                                        val contactPhone = userProfile.primaryContactPhone
+                                        val phoneSuffix = if (contactPhone.isNotBlank()) " ($contactPhone)" else ""
+                                        "1st: $contactName$phoneSuffix • ${userProfile.simPreference.title}"
+                                    }
                                     com.resqlink.ai.domain.model.CallPriority.UNIVERSAL_911 -> "1st: Universal 911 Dispatch • ${userProfile.simPreference.title}"
                                     com.resqlink.ai.domain.model.CallPriority.LOCAL_HOTLINE -> "1st: Local (${primaryHotline?.primaryNumber ?: "122"}) • ${userProfile.simPreference.title}"
                                 },
@@ -310,7 +315,10 @@ fun HomeScreen(
 
             // 6. The Sliding SOS Call (Dynamic according to Call Priority)
             val sliderText = when (userProfile.callPriority) {
-                com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> "SLIDE TO CALL FAMILY (${userProfile.primaryContactName})"
+                com.resqlink.ai.domain.model.CallPriority.FAMILY_FIRST -> {
+                    val contactName = userProfile.primaryContactName.ifBlank { "EMERGENCY CONTACT" }
+                    "SLIDE TO CALL ${contactName.uppercase()}"
+                }
                 com.resqlink.ai.domain.model.CallPriority.UNIVERSAL_911 -> "SLIDE TO CALL 911"
                 com.resqlink.ai.domain.model.CallPriority.LOCAL_HOTLINE -> "SLIDE TO CALL ${primaryHotline?.primaryNumber ?: "122"}"
             }

@@ -75,10 +75,14 @@ fun DirectoryScreen(
     var textSearchQuery by remember { mutableStateOf("") }
     var selectedFilterCategory by remember { mutableStateOf<HotlineCategory?>(null) }
 
-    // Prioritize 5km nearest stations if available; fall back to the complete directory
+    // Prioritize 5km nearest stations if available; fall back to the complete directory only when actively searching
     val filteredHotlinesList = remember(allHotlinesList, nearestHotlinesList, textSearchQuery, selectedFilterCategory) {
-        val baseHotlinesList = if (textSearchQuery.isBlank() && selectedFilterCategory == null && nearestHotlinesList.isNotEmpty()) {
-            nearestHotlinesList
+        val baseHotlinesList = if (textSearchQuery.isBlank()) {
+            if (nearestHotlinesList.isNotEmpty()) {
+                nearestHotlinesList
+            } else {
+                allHotlinesList.filter { (it.distanceKm ?: 999.0) <= 5.0 }
+            }
         } else {
             allHotlinesList
         }

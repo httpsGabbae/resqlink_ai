@@ -4,7 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -45,8 +47,11 @@ import com.resqlink.ai.domain.model.Hotline
 import com.resqlink.ai.domain.model.HotlineCategory
 import com.resqlink.ai.domain.model.TrustedContact
 import com.resqlink.ai.ui.emergency.EmergencyViewModel
+import com.resqlink.ai.ui.emergency.TextMuted
+import com.resqlink.ai.ui.emergency.TextPearl
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.*
 
 /**
  * Filter categories for stations rendered on the interactive map.
@@ -61,20 +66,38 @@ enum class MapFilterCategory(val label: String, val icon: ImageVector) {
 }
 
 /**
+ * Helper to calculate great-circle distance between two coordinates in kilometers using Haversine math.
+ */
+fun calculateHaversineDistanceKm(
+    startLat: Double,
+    startLng: Double,
+    endLat: Double,
+    endLng: Double
+): Double {
+    val earthRadiusKm = 6371.0
+    val deltaLatRad = Math.toRadians(endLat - startLat)
+    val deltaLngRad = Math.toRadians(endLng - startLng)
+    val haversineA = sin(deltaLatRad / 2) * sin(deltaLatRad / 2) +
+            cos(Math.toRadians(startLat)) * cos(Math.toRadians(endLat)) *
+            sin(deltaLngRad / 2) * sin(deltaLngRad / 2)
+    val angularDistanceC = 2 * atan2(sqrt(haversineA), sqrt(1 - haversineA))
+    return earthRadiusKm * angularDistanceC
+}
+
+/**
  * =========================================================================================
- * 5KM EMERGENCY MAP SCREEN
+ * 5KM EMERGENCY DEFENSE MAP SCREEN
  * =========================================================================================
  * Educational Overview:
- * This screen renders a tactical, dark-themed offline map displaying:
+ * This screen renders a tactical, high-reliability offline map displaying:
  * 1. The user's live GPS beacon with pulsating concentric rings.
  * 2. Range rings denoting 1km, 3km, and 5km defense zones around the user.
- * 3. Color-coded emergency responder pins (Hospitals, Police, Fire, Barangay/DRRMO).
- * 4. Offline Leaflet JavaScript engine bundled directly inside assets/leaflet.
- *    If the device is completely offline with no cellular data, it displays a tactical
- *    radar grid with exact coordinate markers, ensuring 100% availability in typhoons
- *    and network blackouts.
- * 5. JavaScript bridge (`ResQBridge`) enabling two-way communication between Leaflet
- *    HTML markers and native Android dialer/navigation intents.
+ * 3. Color-coded emergency responder pins (Hospitals, Police, Fire, Barangay/DRRMO)
+ *    STRICTLY limited to within the 5km radius of the user's current GPS location.
+ * 4. Stored hotlines in other provinces remain safely in the SQLite database and are
+ *    NOT shown unless the user enters their geographic radius.
+ * 5. High-contrast tactical radar canvas ensures that even when offline or before online
+ *    tiles finish loading, the map is NEVER a black image.
  * =========================================================================================
  */
 @SuppressLint("SetJavaScriptEnabled")
@@ -108,41 +131,51 @@ fun MapScreen(
 
     val userLatitude = currentDeviceLocation?.latitude ?: 14.6507
     val userLongitude = currentDeviceLocation?.longitude ?: 121.0509
-    val userAddressLabel = currentDeviceLocation?.address ?: "Current Location"
+    val userAddressLabel = currentDeviceLocation?.address ?: "Current GPS Location"
 
-    // Load bundled local Leaflet CSS and JS (Guarantees zero-network offline functionality)
+    // Load bundled local Leaflet CSS and JS
     val localLeafletCss = remember { LeafletAssetLoader.getCss(context) }
     val localLeafletJs = remember { LeafletAssetLoader.getJs(context) }
 
-    // All hotlines loaded into the map coordinate space (persisted across categories)
-    val allUniqueMapHotlines = remember(allHotlinesList, nearestHotlinesList) {
-        (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
+    // STRICT RADIUS FILTER: Only include stations that are within the 5.0km defense zone!
+    // All other stations remain safely stored in the database and are not dumped on the map.
+    val stationsWithinDefenseRadius = remember(allHotlinesList, nearestHotlinesList, userLatitude, userLongitude) {
+        val allCombined = (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
+        allCombined.mapNotNull { station ->
+            val distKm = station.distanceKm ?: calculateHaversineDistanceKm(
+                userLatitude, userLongitude, station.latitude, station.longitude
+            )
+            if (distKm <= 5.0) {
+                station.copy(distanceKm = round(distKm * 10.0) / 10.0)
+            } else {
+                null
+            }
+        }.sortedBy { it.distanceKm ?: Double.MAX_VALUE }
     }
 
-    // Deduplicated hotlines list for bottom drawer carousel (filtered by category)
-    val displayedDrawerHotlines = remember(allHotlinesList, nearestHotlinesList, selectedFilterCategory) {
-        val mergedList = (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
+    // Deduplicated hotlines list for bottom drawer carousel (filtered by category within 5km)
+    val displayedDrawerHotlines = remember(stationsWithinDefenseRadius, selectedFilterCategory) {
         when (selectedFilterCategory) {
-            MapFilterCategory.ALL -> mergedList
-            MapFilterCategory.HOSPITALS -> mergedList.filter { it.category == HotlineCategory.MEDICAL_HOSPITAL }
-            MapFilterCategory.POLICE -> mergedList.filter { it.category == HotlineCategory.POLICE_PNP }
-            MapFilterCategory.FIRE -> mergedList.filter { it.category == HotlineCategory.FIRE_BFP }
-            MapFilterCategory.BARANGAY -> mergedList.filter {
+            MapFilterCategory.ALL -> stationsWithinDefenseRadius
+            MapFilterCategory.HOSPITALS -> stationsWithinDefenseRadius.filter { it.category == HotlineCategory.MEDICAL_HOSPITAL }
+            MapFilterCategory.POLICE -> stationsWithinDefenseRadius.filter { it.category == HotlineCategory.POLICE_PNP }
+            MapFilterCategory.FIRE -> stationsWithinDefenseRadius.filter { it.category == HotlineCategory.FIRE_BFP }
+            MapFilterCategory.BARANGAY -> stationsWithinDefenseRadius.filter {
                 it.category == HotlineCategory.BARANGAY || it.category == HotlineCategory.DISASTER_DRRMO
             }
             MapFilterCategory.CONTACTS -> emptyList()
         }
     }
 
-    // Build self-contained Leaflet HTML (recomputed only when GPS coordinates or stations update)
-    val completeMapHtmlDocument = remember(userLatitude, userLongitude, allUniqueMapHotlines, trustedContactsList, localLeafletCss, localLeafletJs) {
+    // Build self-contained Leaflet HTML with safe JSON encoding and tile fallbacks
+    val completeMapHtmlDocument = remember(userLatitude, userLongitude, stationsWithinDefenseRadius, trustedContactsList, localLeafletCss, localLeafletJs) {
         generateLeafletMapHtml(
             leafletCss = localLeafletCss,
             leafletJs = localLeafletJs,
             userLat = userLatitude,
             userLng = userLongitude,
             userAddress = userAddressLabel,
-            hotlines = allUniqueMapHotlines,
+            hotlines = stationsWithinDefenseRadius,
             contacts = trustedContactsList,
             primaryContactName = userProfileData.primaryContactName,
             primaryContactPhone = userProfileData.primaryContactPhone,
@@ -155,7 +188,8 @@ fun MapScreen(
         object {
             @JavascriptInterface
             fun onStationClick(stationId: String) {
-                val matchedStation = (nearestHotlinesList + allHotlinesList).find { it.id == stationId }
+                val matchedStation = stationsWithinDefenseRadius.find { it.id == stationId }
+                    ?: (nearestHotlinesList + allHotlinesList).find { it.id == stationId }
                 selectedHotlinePin = matchedStation
                 selectedContactPin = null
             }
@@ -200,6 +234,7 @@ fun MapScreen(
             // 1. Top Header Bar with re-centering and external map shortcut
             MapTopBar(
                 userAddress = userAddressLabel,
+                stationCountInRadius = stationsWithinDefenseRadius.size,
                 onBack = onBack,
                 onRecenter = {
                     webViewInstanceReference?.evaluateJavascript("recenterUser($userLatitude, $userLongitude);", null)
@@ -251,10 +286,15 @@ fun MapScreen(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
-                                cacheMode = WebSettings.LOAD_DEFAULT
-                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                                allowContentAccess = true
                                 allowFileAccess = true
+                                allowContentAccess = true
+                                @Suppress("DEPRECATION")
+                                allowFileAccessFromFileURLs = true
+                                @Suppress("DEPRECATION")
+                                allowUniversalAccessFromFileURLs = true
+                                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                cacheMode = WebSettings.LOAD_DEFAULT
+                                userAgentString = "Mozilla/5.0 (Linux; Android; ResQLink AI 1.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
                                 loadWithOverviewMode = true
                                 useWideViewPort = true
                                 setSupportZoom(true)
@@ -262,6 +302,12 @@ fun MapScreen(
                                 displayZoomControls = false
                             }
                             addJavascriptInterface(javaScriptBridge, "ResQBridge")
+                            webChromeClient = object : WebChromeClient() {
+                                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                    android.util.Log.d("ResQMap", "${consoleMessage?.message()} (line ${consoleMessage?.lineNumber()})")
+                                    return true
+                                }
+                            }
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                     val destinationUrl = request?.url?.toString() ?: ""
@@ -273,7 +319,7 @@ fun MapScreen(
                                     return false
                                 }
                             }
-                            loadDataWithBaseURL("file:///android_asset/leaflet/", completeMapHtmlDocument, "text/html", "UTF-8", null)
+                            loadDataWithBaseURL("https://resqlink.internal/", completeMapHtmlDocument, "text/html", "UTF-8", null)
                             lastLoadedHtmlString = completeMapHtmlDocument
                             webViewInstanceReference = this
                         }
@@ -282,7 +328,7 @@ fun MapScreen(
                         webViewInstanceReference = activeWebView
                         if (lastLoadedHtmlString != completeMapHtmlDocument) {
                             lastLoadedHtmlString = completeMapHtmlDocument
-                            activeWebView.loadDataWithBaseURL("file:///android_asset/leaflet/", completeMapHtmlDocument, "text/html", "UTF-8", null)
+                            activeWebView.loadDataWithBaseURL("https://resqlink.internal/", completeMapHtmlDocument, "text/html", "UTF-8", null)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -309,7 +355,7 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "5km Defense Zone",
+                            text = "5km Defense Zone • ${stationsWithinDefenseRadius.size} in range",
                             color = Color(0xFFF8FAFC),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -365,6 +411,7 @@ fun MapScreen(
 @Composable
 fun MapTopBar(
     userAddress: String,
+    stationCountInRadius: Int,
     onBack: () -> Unit,
     onRecenter: () -> Unit,
     onOpenExternalMaps: () -> Unit
@@ -411,7 +458,7 @@ fun MapTopBar(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        text = userAddress,
+                        text = "$userAddress • $stationCountInRadius station(s) within 5km",
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -422,7 +469,7 @@ fun MapTopBar(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Re-center button: re-focuses map on current user beacon
+                // Re-center button
                 IconButton(
                     onClick = onRecenter,
                     modifier = Modifier
@@ -511,7 +558,7 @@ fun CategoryChipsRow(
 
 /**
  * Bottom drawer displaying either a detailed card for a tapped station/contact,
- * or a horizontal carousel of all discovered emergency stations and ICE family contacts.
+ * or a horizontal carousel of discovered emergency stations within the 5km radius.
  */
 @Composable
 fun MapBottomDrawer(
@@ -554,157 +601,219 @@ fun MapBottomDrawer(
                     onCall = { onCall(selectedContact.phoneNumber) }
                 )
             } else {
-                // Horizontal Carousel of Discovered Stations and Contacts
-                Text(
-                    text = "DISCOVERED STATIONS & ICE CONTACTS (${hotlines.size + contacts.size + 1})",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
+                // Header showing stations strictly in 5km defense zone
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DISCOVERED IN 5KM DEFENSE ZONE (${hotlines.size})",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
+                    )
+
+                    Text(
+                        text = "Other areas stored offline",
+                        color = Color(0xFF64748B),
+                        fontSize = 9.sp
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // ICE Primary Contact Card
-                    item {
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
-                            border = BorderStroke(1.dp, Color(0xFF4338CA)),
-                            modifier = Modifier
-                                .width(180.dp)
-                                .clickable { onCall(primaryContactPhone) }
+                if (hotlines.isEmpty()) {
+                    // Empty state when no stations are within 5km radius of the current location
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF162544)),
+                        border = BorderStroke(1.dp, Color(0xFF263964)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "ICE FAMILY",
-                                        color = Color(0xFFA5B4FC),
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Black
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.FamilyRestroom,
-                                        contentDescription = null,
-                                        tint = Color(0xFFA5B4FC),
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.LocationSearching,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = primaryContactName,
-                                    color = Color.White,
+                                    text = "0 stations within 5km of GPS location",
+                                    color = TextPearl,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1
+                                    fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = primaryContactPhone,
-                                    color = Color(0xFFE0E7FF),
+                                    text = "150+ Philippine stations remain stored in offline database. Universal 911 always ready.",
+                                    color = TextMuted,
                                     fontSize = 10.sp
                                 )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Button(
-                                    onClick = { onCall(primaryContactPhone) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
-                                    shape = RoundedCornerShape(6.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(26.dp)
-                                ) {
-                                    Text("Call Direct", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
+                            }
+                            Button(
+                                onClick = { onCall("911") },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("911", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
+                } else {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Designated Primary Contact Card
+                        if (primaryContactPhone.isNotBlank() || primaryContactName.isNotBlank()) {
+                            item {
+                                val contactTitle = if (primaryContactName.isNotBlank()) primaryContactName else "PRIMARY CONTACT"
+                                val contactPhone = if (primaryContactPhone.isNotBlank()) primaryContactPhone else "No Number"
 
-                    // Hotlines
-                    items(hotlines) { hotline ->
-                        val badgeColor = when (hotline.category) {
-                            HotlineCategory.MEDICAL_HOSPITAL -> Color(0xFFE53935)
-                            HotlineCategory.POLICE_PNP -> Color(0xFF2563EB)
-                            HotlineCategory.FIRE_BFP -> Color(0xFFEA580C)
-                            HotlineCategory.BARANGAY, HotlineCategory.DISASTER_DRRMO -> Color(0xFF059669)
-                            else -> Color(0xFF94A3B8)
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
+                                    border = BorderStroke(1.dp, Color(0xFF4338CA)),
+                                    modifier = Modifier
+                                        .width(180.dp)
+                                        .clickable { onCall(contactPhone) }
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "EMERGENCY CONTACT",
+                                                color = Color(0xFFA5B4FC),
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Black
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = Color(0xFFA5B4FC),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = contactTitle,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = contactPhone,
+                                            color = Color(0xFFE0E7FF),
+                                            fontSize = 10.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Button(
+                                            onClick = { onCall(contactPhone) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(26.dp)
+                                        ) {
+                                            Text("Call Direct", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF162544)),
-                            border = BorderStroke(1.dp, Color(0xFF263964)),
-                            modifier = Modifier
-                                .width(185.dp)
-                                .clickable { onSelectHotline(hotline) }
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                        // Stations strictly within 5km
+                        items(hotlines) { hotline ->
+                            val badgeColor = when (hotline.category) {
+                                HotlineCategory.MEDICAL_HOSPITAL -> Color(0xFFE53935)
+                                HotlineCategory.POLICE_PNP -> Color(0xFF2563EB)
+                                HotlineCategory.FIRE_BFP -> Color(0xFFEA580C)
+                                HotlineCategory.BARANGAY, HotlineCategory.DISASTER_DRRMO -> Color(0xFF059669)
+                                else -> Color(0xFF94A3B8)
+                            }
+
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF162544)),
+                                border = BorderStroke(1.dp, Color(0xFF263964)),
+                                modifier = Modifier
+                                    .width(185.dp)
+                                    .clickable { onSelectHotline(hotline) }
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = hotline.category.name.replace("_", " "),
+                                            color = badgeColor,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Black,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = hotline.distanceKm?.let { "${it}km" } ?: "",
+                                            color = Color(0xFF10B981),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = hotline.category.name.replace("_", " "),
-                                        color = badgeColor,
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Black,
-                                        maxLines = 1
+                                        text = hotline.name,
+                                        color = Color(0xFFF8FAFC),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = hotline.distanceKm?.let { "${it}km" } ?: "",
-                                        color = Color(0xFF10B981),
-                                        fontSize = 9.sp,
+                                        text = hotline.primaryNumber,
+                                        color = Color(0xFFFF334B),
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = hotline.name,
-                                    color = Color(0xFFF8FAFC),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = hotline.primaryNumber,
-                                    color = Color(0xFFFF334B),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Button(
-                                        onClick = { onCall(hotline.primaryNumber) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
-                                        shape = RoundedCornerShape(6.dp),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(26.dp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Text("Call", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    OutlinedButton(
-                                        onClick = { onSelectHotline(hotline) },
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = BorderStroke(1.dp, Color(0xFF263964)),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(26.dp)
-                                    ) {
-                                        Text("Pin", color = Color(0xFFF8FAFC), fontSize = 10.sp)
+                                        Button(
+                                            onClick = { onCall(hotline.primaryNumber) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(26.dp)
+                                        ) {
+                                            Text("Call", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { onSelectHotline(hotline) },
+                                            shape = RoundedCornerShape(6.dp),
+                                            border = BorderStroke(1.dp, Color(0xFF263964)),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(26.dp)
+                                        ) {
+                                            Text("Pin", color = Color(0xFFF8FAFC), fontSize = 10.sp)
+                                        }
                                     }
                                 }
                             }
@@ -906,7 +1015,6 @@ fun ContactDetailCard(
 
 /**
  * Thread-safe cached asset loader for locally bundled Leaflet library files.
- * Guarantees zero network latency, instant DOM execution, and 100% offline uptime.
  */
 object LeafletAssetLoader {
     @Volatile
@@ -938,12 +1046,13 @@ object LeafletAssetLoader {
 }
 
 /**
- * Generates self-contained Leaflet HTML document containing:
- * - Embedded CSS & JavaScript.
- * - Mapbox or CartoDB Dark Matter tile layer with OpenStreetMap fallback.
- * - Concentric defense rings (1km, 3km, 5km).
- * - Custom SVG pin icons for hospitals, police, fire, and barangay stations.
- * - Interactive popups with direct call & external navigation links.
+ * Generates interactive Leaflet Map HTML document.
+ * Includes:
+ * - High-contrast tactical radar canvas as fallback (never a black screen).
+ * - Safe JSON serialization preventing JavaScript syntax errors on user address or station names.
+ * - Mapbox or CartoDB tile layer with OpenStreetMap fallback.
+ * - 1km, 3km, 5km concentric defense zone rings.
+ * - Custom SVG pin icons for local responder stations.
  */
 fun generateLeafletMapHtml(
     leafletCss: String,
@@ -972,6 +1081,8 @@ fun generateLeafletMapHtml(
         }
     }.toString()
 
+    val safeUserAddressJson = JSONObject.quote(userAddress)
+
     return """
     <!DOCTYPE html>
     <html>
@@ -990,22 +1101,33 @@ fun generateLeafletMapHtml(
           overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
+        
+        /* Tactical Radar Grid Background: Guarantees the map is NEVER a black screen */
         #map {
           position: absolute;
           top: 0;
           bottom: 0;
           left: 0;
           right: 0;
-          background-color: #0b1528;
+          width: 100%;
+          height: 100%;
+          background-color: #0d1b2a;
           background-image: 
-            radial-gradient(circle at center, rgba(37, 99, 235, 0.18) 0%, transparent 70%),
-            linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
-          background-size: 100% 100%, 36px 36px, 36px 36px;
+            radial-gradient(circle at center, rgba(14, 165, 233, 0.25) 0%, rgba(15, 23, 42, 0.96) 75%),
+            linear-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(56, 189, 248, 0.15) 1px, transparent 1px);
+          background-size: 100% 100%, 48px 48px, 48px 48px;
         }
+        
         .leaflet-container {
-          background: #0b1528;
+          background: #0d1b2a;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        
+        /* Custom category pin styling */
+        .custom-cat-pin {
+          background: transparent !important;
+          border: none !important;
         }
         
         /* Dark Popups */
@@ -1014,7 +1136,7 @@ fun generateLeafletMapHtml(
           color: #F8FAFC;
           border: 1px solid #263964;
           border-radius: 12px;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.7);
           padding: 4px;
         }
         .leaflet-popup-tip { background: #162544; border: 1px solid #263964; }
@@ -1041,9 +1163,11 @@ fun generateLeafletMapHtml(
           margin-top: 4px;
         }
         
-        /* Pulse Animation for User Beacon */
+        /* User Radar Beacon */
         .user-pulse-marker {
           position: relative;
+          background: transparent !important;
+          border: none !important;
         }
         .user-pulse-dot {
           width: 14px;
@@ -1051,21 +1175,33 @@ fun generateLeafletMapHtml(
           background: #10B981;
           border: 2px solid #FFFFFF;
           border-radius: 50%;
-          box-shadow: 0 0 12px #10B981;
+          box-shadow: 0 0 14px #10B981;
         }
         .user-pulse-ring {
           position: absolute;
-          top: -7px;
-          left: -7px;
-          width: 28px;
-          height: 28px;
+          top: -8px;
+          left: -8px;
+          width: 30px;
+          height: 30px;
           border-radius: 50%;
           border: 2px solid #10B981;
           animation: mapPulse 1.8s infinite ease-out;
         }
         @keyframes mapPulse {
           0% { transform: scale(0.5); opacity: 1; }
-          100% { transform: scale(1.6); opacity: 0; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }
+        
+        /* Range Ring Tooltips */
+        .ring-label {
+          background: rgba(16, 28, 54, 0.85) !important;
+          border: 1px solid #263964 !important;
+          color: #38BDF8 !important;
+          font-size: 10px !important;
+          font-weight: bold !important;
+          border-radius: 6px !important;
+          padding: 2px 6px !important;
+          box-shadow: none !important;
         }
       </style>
       <script>
@@ -1076,171 +1212,183 @@ fun generateLeafletMapHtml(
       <div id="map"></div>
       <script>
         function initMap() {
-          if (typeof L === 'undefined') {
-            console.error('Leaflet failed to load');
-            return;
-          }
+          try {
+            if (typeof L === 'undefined') {
+              console.error('Leaflet failed to load');
+              return;
+            }
 
-          const userLat = $userLat;
-          const userLng = $userLng;
-          const hotlines = $hotlinesJson;
+            const userLat = $userLat;
+            const userLng = $userLng;
+            const userAddress = $safeUserAddressJson;
+            const hotlines = $hotlinesJson;
 
-          const map = L.map('map', {
-            zoomControl: false,
-            attributionControl: false,
-            minZoom: 10,
-            maxZoom: 19
-          }).setView([userLat, userLng], 14);
+            const map = L.map('map', {
+              zoomControl: false,
+              attributionControl: false,
+              minZoom: 10,
+              maxZoom: 19
+            }).setView([userLat, userLng], 14);
 
-          window.resqMap = map;
+            window.resqMap = map;
 
-          // CartoDB Dark Matter tiles with Mapbox and OpenStreetMap fallback
-          const mapboxToken = "$mapboxToken";
-          const darkTiles = L.tileLayer((mapboxToken && mapboxToken.length > 10) ? 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19,
-            subdomains: 'abcd',
-            errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-          });
-          darkTiles.on('tileerror', function() {
-            if (!window._osmFallback) {
-              window._osmFallback = true;
-              L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // Tile layers: Mapbox or CartoDB with OpenStreetMap fallback
+            const mapboxToken = "$mapboxToken";
+            let primaryTiles;
+            if (mapboxToken && mapboxToken.length > 10) {
+              primaryTiles = L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken, {
+                maxZoom: 19
+              });
+            } else {
+              // CartoDB Dark Matter with clean URL
+              primaryTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
                 maxZoom: 19,
-                errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
-              }).addTo(map);
+                subdomains: 'abcd'
+              });
             }
-          });
-          darkTiles.addTo(map);
 
-          // Range Rings: 1km, 3km, 5km Defense Zone
-          L.circle([userLat, userLng], {
-            radius: 1000,
-            color: '#38BDF8',
-            weight: 1,
-            dashArray: '4, 4',
-            fill: false
-          }).addTo(map);
-
-          L.circle([userLat, userLng], {
-            radius: 3000,
-            color: '#38BDF8',
-            weight: 1,
-            dashArray: '6, 6',
-            fill: false
-          }).addTo(map);
-
-          // 5km Radius Defense Perimeter
-          L.circle([userLat, userLng], {
-            radius: 5000,
-            color: '#E53935',
-            weight: 2,
-            dashArray: '6, 6',
-            fillColor: '#E53935',
-            fillOpacity: 0.06
-          }).addTo(map);
-
-          // User Pulse Marker Icon
-          const userIcon = L.divIcon({
-            className: 'user-pulse-marker',
-            html: '<div class="user-pulse-ring"></div><div class="user-pulse-dot"></div>',
-            iconSize: [14, 14],
-            iconAnchor: [7, 7]
-          });
-
-          L.marker([userLat, userLng], { icon: userIcon, zIndexOffset: 1000 })
-            .addTo(map)
-            .bindPopup('<div class="popup-title">Your GPS Location</div><div class="popup-dist">$userAddress</div>');
-
-          // Helper to create category SVG icon
-          function createCategoryPin(color, emoji) {
-            const svg = `
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-                <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.73-6.27-14-14-14z" fill="` + color + `" stroke="#FFFFFF" stroke-width="1.5"/>
-                <text x="14" y="18" font-size="12" text-anchor="middle" dominant-baseline="central">` + emoji + `</text>
-              </svg>
-            `;
-            return L.divIcon({
-              className: 'custom-cat-pin',
-              html: svg,
-              iconSize: [28, 36],
-              iconAnchor: [14, 36],
-              popupAnchor: [0, -32]
+            primaryTiles.on('tileerror', function() {
+              if (!window._osmFallback) {
+                window._osmFallback = true;
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                  maxZoom: 19
+                }).addTo(map);
+              }
             });
-          }
+            primaryTiles.addTo(map);
 
-          const iconHospital = createCategoryPin('#E53935', '🏥');
-          const iconPolice = createCategoryPin('#2563EB', '👮');
-          const iconFire = createCategoryPin('#EA580C', '🚒');
-          const iconBarangay = createCategoryPin('#059669', '🏛️');
+            // 1. Concentric Range Rings: 1km and 3km
+            L.circle([userLat, userLng], {
+              radius: 1000,
+              color: '#38BDF8',
+              weight: 1.5,
+              dashArray: '4, 4',
+              fill: false
+            }).addTo(map).bindTooltip("1km", { permanent: true, direction: "top", className: "ring-label" });
 
-          const markers = [];
+            L.circle([userLat, userLng], {
+              radius: 3000,
+              color: '#38BDF8',
+              weight: 1.5,
+              dashArray: '6, 6',
+              fill: false
+            }).addTo(map).bindTooltip("3km", { permanent: true, direction: "top", className: "ring-label" });
 
-          hotlines.forEach(h => {
-            let icon = iconHospital;
-            let catColor = '#E53935';
-            let catLabel = 'Hospital / ER';
-            if (h.category.indexOf('POLICE') !== -1) {
-              icon = iconPolice;
-              catColor = '#2563EB';
-              catLabel = 'Police Precinct';
-            } else if (h.category.indexOf('FIRE') !== -1) {
-              icon = iconFire;
-              catColor = '#EA580C';
-              catLabel = 'Fire Station';
-            } else if (h.category.indexOf('BARANGAY') !== -1 || h.category.indexOf('DISASTER') !== -1) {
-              icon = iconBarangay;
-              catColor = '#059669';
-              catLabel = 'Barangay / DRRM';
-            }
+            // 2. 5km Radius Defense Perimeter (Outer Boundary)
+            L.circle([userLat, userLng], {
+              radius: 5000,
+              color: '#E53935',
+              weight: 2,
+              dashArray: '6, 6',
+              fillColor: '#E53935',
+              fillOpacity: 0.08
+            }).addTo(map).bindTooltip("5km Defense Zone", { permanent: true, direction: "top", className: "ring-label" });
 
-            const safeName = (h.name || '').replace(/['"]/g, '');
-            const safePhone = (h.phone || '').replace(/['"]/g, '');
-            const distLabel = h.distance ? (h.distance + ' km away') : (h.city || '');
+            // 3. User Radar Beacon Marker
+            const userIcon = L.divIcon({
+              className: 'user-pulse-marker',
+              html: '<div class="user-pulse-ring"></div><div class="user-pulse-dot"></div>',
+              iconSize: [14, 14],
+              iconAnchor: [7, 7]
+            });
 
-            const popupContent = `
-              <div>
-                <div class="popup-cat" style="color: ` + catColor + `;">` + catLabel + `</div>
-                <div class="popup-title">` + safeName + `</div>
-                <div class="popup-dist">` + distLabel + `</div>
-                <button class="popup-btn" onclick="callPhone('` + safePhone + `')">📞 Call ` + safePhone + `</button>
-                <button class="popup-btn popup-nav-btn" onclick="navigateStation(` + h.lat + `, ` + h.lng + `, '` + safeName + `')">🧭 Open in Maps</button>
-              </div>
-            `;
-
-            const m = L.marker([h.lat, h.lng], { icon: icon })
+            L.marker([userLat, userLng], { icon: userIcon, zIndexOffset: 1000 })
               .addTo(map)
-              .bindPopup(popupContent);
+              .bindPopup('<div class="popup-title">Your GPS Location</div><div class="popup-dist">' + userAddress + '</div>');
 
-            m.on('click', function() {
-              if (window.ResQBridge) {
-                window.ResQBridge.onStationClick(h.id);
+            // 4. Helper to create category SVG icon
+            function createCategoryPin(color, emoji) {
+              const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">' +
+                '<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.73-6.27-14-14-14z" fill="' + color + '" stroke="#FFFFFF" stroke-width="1.5"/>' +
+                '<text x="14" y="18" font-size="12" text-anchor="middle" dominant-baseline="central">' + emoji + '</text>' +
+                '</svg>';
+              return L.divIcon({
+                className: 'custom-cat-pin',
+                html: svg,
+                iconSize: [28, 36],
+                iconAnchor: [14, 36],
+                popupAnchor: [0, -32]
+              });
+            }
+
+            const iconHospital = createCategoryPin('#E53935', '🏥');
+            const iconPolice = createCategoryPin('#2563EB', '👮');
+            const iconFire = createCategoryPin('#EA580C', '🚒');
+            const iconBarangay = createCategoryPin('#059669', '🏛️');
+
+            const markers = [];
+
+            // 5. Add local stations within 5km
+            hotlines.forEach(h => {
+              let icon = iconHospital;
+              let catColor = '#E53935';
+              let catLabel = 'Hospital / ER';
+              if (h.category.indexOf('POLICE') !== -1) {
+                icon = iconPolice;
+                catColor = '#2563EB';
+                catLabel = 'Police Precinct';
+              } else if (h.category.indexOf('FIRE') !== -1) {
+                icon = iconFire;
+                catColor = '#EA580C';
+                catLabel = 'Fire Station';
+              } else if (h.category.indexOf('BARANGAY') !== -1 || h.category.indexOf('DISASTER') !== -1) {
+                icon = iconBarangay;
+                catColor = '#059669';
+                catLabel = 'Barangay / DRRM';
               }
+
+              const safeName = (h.name || '').replace(/['"]/g, '');
+              const safePhone = (h.phone || '').replace(/['"]/g, '');
+              const distLabel = h.distance ? (h.distance + ' km away') : (h.city || '');
+
+              const popupContent = 
+                '<div>' +
+                  '<div class="popup-cat" style="color: ' + catColor + ';">' + catLabel + '</div>' +
+                  '<div class="popup-title">' + safeName + '</div>' +
+                  '<div class="popup-dist">' + distLabel + '</div>' +
+                  '<button class="popup-btn" onclick="callPhone(\'' + safePhone + '\')">📞 Call ' + safePhone + '</button>' +
+                  '<button class="popup-btn popup-nav-btn" onclick="navigateStation(' + h.lat + ', ' + h.lng + ', \'' + safeName + '\')">🧭 Open in Maps</button>' +
+                '</div>';
+
+              const m = L.marker([h.lat, h.lng], { icon: icon })
+                .addTo(map)
+                .bindPopup(popupContent);
+
+              m.on('click', function() {
+                if (window.ResQBridge) {
+                  window.ResQBridge.onStationClick(h.id);
+                }
+              });
+
+              markers.push({ marker: m, category: h.category });
             });
 
-            markers.push({ marker: m, category: h.category });
-          });
+            // 6. Category filter function
+            window.filterCategory = function(cat) {
+              markers.forEach(function(item) {
+                var match = false;
+                if (cat === 'ALL') match = true;
+                else if (cat === 'MEDICAL_HOSPITAL' && item.category.indexOf('HOSPITAL') !== -1) match = true;
+                else if (cat === 'POLICE_PNP' && item.category.indexOf('POLICE') !== -1) match = true;
+                else if (cat === 'FIRE_BFP' && item.category.indexOf('FIRE') !== -1) match = true;
+                else if (cat === 'BARANGAY' && (item.category.indexOf('BARANGAY') !== -1 || item.category.indexOf('DISASTER') !== -1)) match = true;
+                else if (cat === 'CONTACTS') match = false;
 
-          window.filterCategory = function(cat) {
-            markers.forEach(function(item) {
-              var match = false;
-              if (cat === 'ALL') match = true;
-              else if (cat === 'MEDICAL_HOSPITAL' && item.category.indexOf('HOSPITAL') !== -1) match = true;
-              else if (cat === 'POLICE_PNP' && item.category.indexOf('POLICE') !== -1) match = true;
-              else if (cat === 'FIRE_BFP' && item.category.indexOf('FIRE') !== -1) match = true;
-              else if (cat === 'BARANGAY' && (item.category.indexOf('BARANGAY') !== -1 || item.category.indexOf('DISASTER') !== -1)) match = true;
-              else if (cat === 'CONTACTS') match = false;
+                if (match) {
+                  if (!map.hasLayer(item.marker)) map.addLayer(item.marker);
+                } else {
+                  if (map.hasLayer(item.marker)) map.removeLayer(item.marker);
+                }
+              });
+            };
 
-              if (match) {
-                if (!map.hasLayer(item.marker)) map.addLayer(item.marker);
-              } else {
-                if (map.hasLayer(item.marker)) map.removeLayer(item.marker);
-              }
-            });
-          };
-
-          // Invalidate size to ensure proper rendering inside WebView
-          setTimeout(function() { map.invalidateSize(); }, 150);
-          setTimeout(function() { map.invalidateSize(); }, 400);
+            // Invalidate size to ensure rendering inside WebView
+            setTimeout(function() { map.invalidateSize(); }, 100);
+            setTimeout(function() { map.invalidateSize(); }, 300);
+            setTimeout(function() { map.invalidateSize(); }, 800);
+          } catch (err) {
+            console.error("Map initialization failed: ", err);
+          }
         }
 
         function callPhone(number) {
