@@ -43,11 +43,11 @@ object AppConfig {
     const val ELEVENLABS_MODEL_ID: String = "eleven_multilingual_v2"
 
     /**
-     * Mapbox Access Token (Optional):
-     * Used by the 5km Interactive Defense Map to render ultra-sharp Mapbox Dark-v11 tiles.
-     * If blank, falls back to CartoDB Dark Matter & local radar grid.
+     * Mapbox Public Access Token:
+     * Loaded securely from BuildConfig / local.properties to render ultra-sharp Mapbox Dark-v11 tiles.
+     * Fallback: CartoDB Dark Matter & local radar grid.
      */
-    const val MAPBOX_ACCESS_TOKEN: String = ""
+    val MAPBOX_ACCESS_TOKEN: String = com.resqlink.ai.BuildConfig.MAPBOX_ACCESS_TOKEN
 
     /**
      * Backward-compatible alias for single-key setups.

@@ -1,8 +1,21 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
 }
+
+val localProps = Properties().apply {
+  val propsFile = rootProject.file("local.properties")
+  if (propsFile.exists()) {
+    FileInputStream(propsFile).use { load(it) }
+  }
+}
+val mapboxToken: String = System.getenv("MAPBOX_ACCESS_TOKEN")
+  ?: localProps.getProperty("mapbox.token", "")
+
 
 android {
   namespace = "com.resqlink.ai"
@@ -13,6 +26,7 @@ android {
     targetSdk = 35
     versionCode = 4
     versionName = "1.3.0"
+    buildConfigField("String", "MAPBOX_ACCESS_TOKEN", "\"$mapboxToken\"")
   }
 
   buildTypes {

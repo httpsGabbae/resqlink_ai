@@ -281,7 +281,11 @@ fun MapScreen(
                 AndroidView(
                     factory = { viewContext ->
                         WebView(viewContext).apply {
-                            setBackgroundColor(0xFF0B1528.toInt())
+                            layoutParams = android.view.ViewGroup.LayoutParams(
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            setBackgroundColor(0xFF0D1B2A.toInt())
                             settings.apply {
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
@@ -319,7 +323,7 @@ fun MapScreen(
                                     return false
                                 }
                             }
-                            loadDataWithBaseURL("https://resqlink.internal/", completeMapHtmlDocument, "text/html", "UTF-8", null)
+                            loadDataWithBaseURL(null, completeMapHtmlDocument, "text/html", "UTF-8", null)
                             lastLoadedHtmlString = completeMapHtmlDocument
                             webViewInstanceReference = this
                         }
@@ -328,7 +332,7 @@ fun MapScreen(
                         webViewInstanceReference = activeWebView
                         if (lastLoadedHtmlString != completeMapHtmlDocument) {
                             lastLoadedHtmlString = completeMapHtmlDocument
-                            activeWebView.loadDataWithBaseURL("https://resqlink.internal/", completeMapHtmlDocument, "text/html", "UTF-8", null)
+                            activeWebView.loadDataWithBaseURL(null, completeMapHtmlDocument, "text/html", "UTF-8", null)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
@@ -1089,6 +1093,7 @@ fun generateLeafletMapHtml(
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
       <style>
         $leafletCss
 
@@ -1097,7 +1102,8 @@ fun generateLeafletMapHtml(
           padding: 0;
           width: 100%;
           height: 100%;
-          background-color: #0b1528;
+          min-height: 100%;
+          background-color: #0d1b2a;
           overflow: hidden;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
@@ -1111,6 +1117,7 @@ fun generateLeafletMapHtml(
           right: 0;
           width: 100%;
           height: 100%;
+          min-height: 100%;
           background-color: #0d1b2a;
           background-image: 
             radial-gradient(circle at center, rgba(14, 165, 233, 0.25) 0%, rgba(15, 23, 42, 0.96) 75%),
@@ -1204,8 +1211,11 @@ fun generateLeafletMapHtml(
           box-shadow: none !important;
         }
       </style>
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
       <script>
-        $leafletJs
+        if (typeof L === 'undefined') {
+          $leafletJs
+        }
       </script>
     </head>
     <body>
@@ -1232,12 +1242,15 @@ fun generateLeafletMapHtml(
 
             window.resqMap = map;
 
-            // Tile layers: Mapbox or CartoDB with OpenStreetMap fallback
+            // Tile layers: Mapbox Dark-v11 with CartoDB & OpenStreetMap fallbacks
             const mapboxToken = "$mapboxToken";
             let primaryTiles;
             if (mapboxToken && mapboxToken.length > 10) {
-              primaryTiles = L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken, {
-                maxZoom: 19
+              primaryTiles = L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/{z}/{x}/{y}?access_token=' + mapboxToken, {
+                tileSize: 512,
+                zoomOffset: -1,
+                maxZoom: 19,
+                attribution: 'Mapbox'
               });
             } else {
               // CartoDB Dark Matter with clean URL
@@ -1382,10 +1395,13 @@ fun generateLeafletMapHtml(
               });
             };
 
-            // Invalidate size to ensure rendering inside WebView
-            setTimeout(function() { map.invalidateSize(); }, 100);
-            setTimeout(function() { map.invalidateSize(); }, 300);
+            // Invalidate size across layout cycles to guarantee rendering inside WebView
+            window.addEventListener('resize', function() { map.invalidateSize(); });
+            setTimeout(function() { map.invalidateSize(); }, 50);
+            setTimeout(function() { map.invalidateSize(); }, 150);
+            setTimeout(function() { map.invalidateSize(); }, 350);
             setTimeout(function() { map.invalidateSize(); }, 800);
+            setTimeout(function() { map.invalidateSize(); }, 1500);
           } catch (err) {
             console.error("Map initialization failed: ", err);
           }
