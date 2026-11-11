@@ -38,7 +38,7 @@ export function Navbar() {
       {/* Top emergency awareness strip */}
       <div className="bg-[#17212D] text-[#FAF9F7] text-xs py-1.5 px-4 text-center font-medium flex items-center justify-center gap-2">
         <span className="inline-block w-2 h-2 rounded-full bg-[#187A61] animate-pulse" />
-        <span>Philippine Emergency Hotlines: National 911 • Red Cross 143 • BFP Fire (02) 8426-0219</span>
+        <span>Official Philippine Emergency Hotlines: National 911 • PNP 117 • Red Cross 143 (8527-000) • DPWH 165-02</span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

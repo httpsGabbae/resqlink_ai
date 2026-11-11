@@ -105,8 +105,8 @@ class MainActivity : ComponentActivity() {
                         LoginScreen(
                             onGoogleSignInClick = {
                                 emergencyViewModel.signInWithGoogle(
-                                    displayName = "Juan Dela Cruz",
-                                    email = "juan.delacruz@gmail.com"
+                                    displayName = "User",
+                                    email = ""
                                 )
                             },
                             onGuestClick = {

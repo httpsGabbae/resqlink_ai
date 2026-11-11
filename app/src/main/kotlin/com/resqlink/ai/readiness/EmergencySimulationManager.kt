@@ -45,8 +45,8 @@ class EmergencySimulationManager(
             timestamp = System.currentTimeMillis()
         ),
         targetContacts: List<TrustedContact> = listOf(
-            TrustedContact(1, "Maria Dela Cruz (Mom)", "0917-888-1234", "Mother", true),
-            TrustedContact(2, "Juan Dela Cruz Jr.", "0918-999-5678", "Brother", true)
+            TrustedContact(1, "Primary Emergency Contact", "0917-000-0001", "Family", true),
+            TrustedContact(2, "Secondary Emergency Contact", "0918-000-0002", "ICE", true)
         )
     ) {
         stopSimulation()
@@ -59,7 +59,7 @@ class EmergencySimulationManager(
             isSimulated = true
         )
 
-        val previewMessage = "EMERGENCY ALERT (SIMULATION): Juan Dela Cruz triggered test SOS at ${mockLocation.address}. Coordinates: https://maps.google.com/?q=${mockLocation.latitude},${mockLocation.longitude}"
+        val previewMessage = "EMERGENCY ALERT (SIMULATION): Distress trigger test at ${mockLocation.address}. Coordinates: https://maps.google.com/?q=${mockLocation.latitude},${mockLocation.longitude}"
 
         _simulationState.value = SimulationState(
             isRunning = true,

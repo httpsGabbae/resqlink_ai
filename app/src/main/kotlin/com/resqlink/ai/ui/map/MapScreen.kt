@@ -125,7 +125,8 @@ fun MapScreen(
             hotlines = allMapHotlines,
             contacts = trustedContacts,
             primaryContactName = userProfile.primaryContactName,
-            primaryContactPhone = userProfile.primaryContactPhone
+            primaryContactPhone = userProfile.primaryContactPhone,
+            mapboxToken = com.resqlink.ai.data.local.AppConfig.MAPBOX_ACCESS_TOKEN
         )
     }
 
@@ -305,6 +306,7 @@ fun MapScreen(
                 contacts = trustedContacts,
                 primaryContactName = userProfile.primaryContactName,
                 primaryContactPhone = userProfile.primaryContactPhone,
+
                 onDismissSelection = {
                     selectedHotline = null
                     selectedContact = null
@@ -489,6 +491,7 @@ fun MapBottomDrawer(
     contacts: List<TrustedContact>,
     primaryContactName: String,
     primaryContactPhone: String,
+
     onDismissSelection: () -> Unit,
     onSelectHotline: (Hotline) -> Unit,
     onSelectContact: (TrustedContact) -> Unit,
@@ -912,7 +915,8 @@ fun generateLeafletMapHtml(
     hotlines: List<Hotline>,
     contacts: List<TrustedContact>,
     primaryContactName: String,
-    primaryContactPhone: String
+    primaryContactPhone: String,
+    mapboxToken: String = ""
 ): String {
     val hotlinesJson = JSONArray().apply {
         for (h in hotlines) {
@@ -1052,7 +1056,8 @@ fun generateLeafletMapHtml(
           window.resqMap = map;
 
           // CartoDB Dark Matter tiles with OpenStreetMap fallback and transparent error tiles
-          const darkTiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          const mapboxToken = "$mapboxToken";
+          const darkTiles = L.tileLayer((mapboxToken && mapboxToken.length > 10) ? 'https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/256/{z}/{x}/{y}@2x?access_token=' + mapboxToken : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
             subdomains: 'abcd',
             errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'

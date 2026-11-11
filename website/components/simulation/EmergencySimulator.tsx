@@ -266,17 +266,17 @@ export function EmergencySimulator() {
 
             <div className="bg-[#101C36] rounded-2xl p-4 border border-[#263964] space-y-3 font-mono text-xs">
               <div className="flex items-center justify-between text-[#94A3B8] text-[11px] border-b border-[#263964] pb-2">
-                <span>To: Maria Dela Cruz (+63 917 888 1234)</span>
+                <span>To: Primary Emergency Contact (+63 917 000 0001)</span>
                 <span>Carrier: Smart / Globe</span>
               </div>
               <p className="text-slate-100 leading-relaxed font-sans text-xs">
-                🚨 <strong className="text-white">EMERGENCY SOS:</strong> Juan Dela Cruz triggered distress assist near Quezon Memorial Circle, QC.
+                🚨 <strong className="text-white">EMERGENCY SOS:</strong> Distress assist triggered near Quezon Memorial Circle, QC.
                 <br />
                 📍 <strong className="text-white">GPS Fix:</strong> 14.6507° N, 121.0509° E (±4.2m)
                 <br />
                 🗺️ <span className="text-[#38BDF8] underline">https://maps.google.com/?q=14.6507,121.0509</span>
                 <br />
-                🩺 <strong className="text-white">Rescue Card:</strong> Blood Type O+, Penicillin Allergy.
+                🩺 <strong className="text-white">Rescue Card:</strong> Medical data attached to secure local beacon.
               </p>
               <div className="text-[10px] text-[#64748B] flex items-center justify-between pt-1">
                 <span>Characters: 148 / 160 (1 SMS Segment)</span>

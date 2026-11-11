@@ -1741,7 +1741,7 @@
               <div class="medical-icon-badge">✚</div>
               <div>
                 <div style="font-size: 13px; font-weight: 900; color: #F8FAFC; letter-spacing: 0.5px;">EMERGENCY MEDICAL ID</div>
-                <div style="font-size: 11px; color: #94A3B8;" id="homeUserName">Juan Dela Cruz</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="homeUserName">Emergency User</div>
               </div>
             </div>
             <div style="display: flex; align-items: center; gap: 4px; color: #FF334B; font-size: 12px; font-weight: 800;">
@@ -1764,7 +1764,7 @@
           <div class="med-ice-row">
             <div>
               <span style="color: #94A3B8; font-weight: 700;">ICE Contact:</span>
-              <span style="color: #F8FAFC; font-weight: 800; margin-left: 4px;" id="homeIceContact">Maria (0917-888-1234)</span>
+              <span style="color: #F8FAFC; font-weight: 800; margin-left: 4px;" id="homeIceContact">Primary Contact (0917-000-0001)</span>
             </div>
             <span style="color: #10B981; font-weight: 800; font-size: 10px;">AUTHORIZED</span>
           </div>
@@ -2023,7 +2023,7 @@
                 <div class="menu-item-icon">✚</div>
                 <div>
                   <div class="menu-item-title">Account & Medical Profile</div>
-                  <div class="menu-item-subtitle" id="settingsProfileSummary">Juan Dela Cruz • Blood O+ • Allergies</div>
+                  <div class="menu-item-subtitle" id="settingsProfileSummary">Emergency Profile • Rescue Card</div>
                 </div>
               </div>
               <div class="menu-item-right">
@@ -2145,7 +2145,7 @@
                   <span class="badge-pill">Personal</span>
                 </div>
                 <p style="font-size: 11px; color: #94A3B8; margin-top: 4px; line-height: 15px;" id="priorityFamilyDesc">
-                  Directly auto-calls your primary contact: Maria Dela Cruz.
+                  Directly auto-calls your designated primary ICE contact.
                 </p>
               </div>
             </div>
@@ -2212,13 +2212,14 @@
 
             <div class="input-group">
               <label class="input-label">Full Name</label>
-              <input type="text" class="input-field" id="editName" value="Juan Dela Cruz">
+              <input type="text" class="input-field" id="editName" value="" placeholder="Your Full Name">
             </div>
 
             <div class="input-group">
               <label class="input-label">Blood Type</label>
               <select class="input-field" id="editBloodType" style="cursor: pointer;">
-                <option value="O+" selected>O Positive (O+)</option>
+                <option value="" selected>Not Specified</option>
+                <option value="O+">O Positive (O+)</option>
                 <option value="O-">O Negative (O-)</option>
                 <option value="A+">A Positive (A+)</option>
                 <option value="A-">A Negative (A-)</option>
@@ -2231,24 +2232,24 @@
 
             <div class="input-group">
               <label class="input-label">Known Allergies</label>
-              <input type="text" class="input-field" id="editAllergies" value="Penicillin, Pollen">
+              <input type="text" class="input-field" id="editAllergies" value="" placeholder="e.g. None or list allergies">
             </div>
 
             <div class="input-group">
               <label class="input-label">Medical Conditions / Notes</label>
-              <input type="text" class="input-field" id="editNotes" value="Mild Asthma (Inhaler in pocket)">
+              <input type="text" class="input-field" id="editNotes" value="" placeholder="e.g. Any medical notes">
             </div>
 
             <div style="font-size: 13px; font-weight: 800; color: #10B981; margin-top: 6px;">PRIMARY IN CASE OF EMERGENCY (ICE)</div>
 
             <div class="input-group">
               <label class="input-label">ICE Contact Name</label>
-              <input type="text" class="input-field" id="editIceName" value="Maria Dela Cruz">
+              <input type="text" class="input-field" id="editIceName" value="" placeholder="Primary Contact Name">
             </div>
 
             <div class="input-group">
               <label class="input-label">ICE Contact Phone</label>
-              <input type="text" class="input-field" id="editIcePhone" value="0917-888-1234">
+              <input type="text" class="input-field" id="editIcePhone" value="" placeholder="Mobile Number (e.g. 0917xxxxxxx)">
             </div>
 
             <button class="btn-save-sub" onclick="saveMedicalProfile()">
@@ -2267,16 +2268,16 @@
 
             <div style="display: flex; justify-content: space-between; align-items: center; background: #101C36; padding: 10px 12px; border-radius: 10px; border: 1px solid #263964;">
               <div>
-                <div style="font-size: 13px; font-weight: 800;" id="phonebookIceName">Maria Dela Cruz</div>
-                <div style="font-size: 11px; color: #94A3B8;" id="phonebookIcePhone">Family / Spouse • 0917-888-1234</div>
+                <div style="font-size: 13px; font-weight: 800;" id="phonebookIceName">Primary Emergency Contact</div>
+                <div style="font-size: 11px; color: #94A3B8;" id="phonebookIcePhone">Family / ICE • 0917-000-0001</div>
               </div>
               <span class="badge-pill active">ICE Primary</span>
             </div>
 
             <div style="display: flex; justify-content: space-between; align-items: center; background: #101C36; padding: 10px 12px; border-radius: 10px; border: 1px solid #263964;">
               <div>
-                <div style="font-size: 13px; font-weight: 800;">Pedro Santos</div>
-                <div style="font-size: 11px; color: #94A3B8;">Guardian • 0918-555-5678</div>
+                <div style="font-size: 13px; font-weight: 800;">Secondary Emergency Contact</div>
+                <div style="font-size: 11px; color: #94A3B8;">Guardian • 0918-000-0002</div>
               </div>
               <span class="badge-pill active">Backup</span>
             </div>
@@ -2548,7 +2549,7 @@
         <div style="background: #162544; border: 1px solid #263964; border-radius: 12px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
           <div>
             <div style="font-size: 9px; color: #94A3B8; font-weight: 800;">PATIENT</div>
-            <div style="font-size: 12px; font-weight: 800; color: #FFFFFF;" id="vaPatientName">Juan Dela Cruz</div>
+            <div style="font-size: 12px; font-weight: 800; color: #FFFFFF;" id="vaPatientName">User</div>
           </div>
           <div style="text-align: center;">
             <div style="font-size: 9px; color: #94A3B8; font-weight: 800;">BLOOD</div>
@@ -2615,13 +2616,13 @@
     function checkSession() {
       const loggedIn = localStorage.getItem('resqlink_logged_in');
       if (loggedIn === 'true') {
-        const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
-      const user = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
-        const blood = localStorage.getItem('resqlink_blood') || 'O+';
-        const allergies = localStorage.getItem('resqlink_allergies') || 'Penicillin, Pollen';
-        const notes = localStorage.getItem('resqlink_notes') || 'Mild Asthma (Inhaler in pocket)';
-        const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
-        const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
+        const rawUser = localStorage.getItem('resqlink_user') || 'User';
+      const user = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'User';
+        const blood = localStorage.getItem('resqlink_blood') || '';
+        const allergies = localStorage.getItem('resqlink_allergies') || '';
+        const notes = localStorage.getItem('resqlink_notes') || '';
+        const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
+        const icePhone = localStorage.getItem('resqlink_ice_phone') || '';
         configuredCallPriority = localStorage.getItem('resqlink_call_priority') || 'LOCAL_HOTLINE';
         configuredSimPref = localStorage.getItem('resqlink_sim_pref') || 'SYSTEM_DEFAULT';
 
@@ -2731,7 +2732,7 @@
       const settingsSub = document.getElementById('settingsPrioritySummary');
       const sliderLabel = document.getElementById('sliderTextLabel');
       const sosSublabel = document.getElementById('sosCoreSublabel');
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const stHotline = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
 
       const simTag = configuredSimPref === 'SIM_1' ? ' • SIM 1' : (configuredSimPref === 'SIM_2' ? ' • SIM 2' : '');
@@ -2877,7 +2878,7 @@
 
     function doGoogleLogin() {
       localStorage.setItem('resqlink_logged_in', 'true');
-      localStorage.setItem('resqlink_user', 'Juan Dela Cruz');
+      localStorage.setItem('resqlink_user', 'User');
       checkSession();
     }
 
@@ -3327,7 +3328,7 @@
       remainingSeconds = seconds;
       document.getElementById('hudTitle').innerText = title.toUpperCase();
       
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
       const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
       const stNum = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
@@ -3379,7 +3380,7 @@
     function confirmEmergencyCall() {
       clearInterval(countdownInterval);
       closeEmergencyHud();
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
       const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
       const stNum = document.getElementById('nearestStationHotline')?.innerText.replace('Hotline: ', '') || '122';
@@ -3749,11 +3750,11 @@
       clearInterval(countdownInterval);
       closeEmergencyHud();
 
-      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const rawUser = localStorage.getItem('resqlink_user') || 'User';
       const user = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
       const blood = localStorage.getItem('resqlink_blood') || 'O+';
       const allergies = localStorage.getItem('resqlink_allergies') || 'Penicillin';
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
 
       const stName = document.getElementById('nearestStationName')?.innerText || 'Nearest Local Station';
@@ -3802,7 +3803,7 @@
     async function playEmergencyBroadcastCycle() {
       if (vaIsHandoverComplete) return;
 
-      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const rawUser = localStorage.getItem('resqlink_user') || 'User';
       const cleanUser = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
       const blood = localStorage.getItem('resqlink_blood') || 'O+';
       const allergies = localStorage.getItem('resqlink_allergies') || 'None documented';
@@ -3896,12 +3897,12 @@
 
       // SLM Classifier and Telemetry Grounding
       const q = question.toLowerCase();
-      const rawUser = localStorage.getItem('resqlink_user') || 'Juan Dela Cruz';
+      const rawUser = localStorage.getItem('resqlink_user') || 'User';
       const cleanUser = rawUser.replace(/google\s*(user|account)?/gi, '').trim() || 'Patient';
       const blood = localStorage.getItem('resqlink_blood') || 'O+';
       const allergies = localStorage.getItem('resqlink_allergies') || 'None documented';
       const cleanLocation = currentAddress.replace(/location\s*coordinates.*/gi, '').replace(/google.*/gi, '').trim() || 'Metro Manila area';
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
 
       let answer = "";
@@ -4033,7 +4034,7 @@
 
     function getMapItems() {
       // Gather contacts from session / storage
-      const iceName = localStorage.getItem('resqlink_ice_name') || 'Maria Dela Cruz';
+      const iceName = localStorage.getItem('resqlink_ice_name') || 'Primary Emergency Contact';
       const icePhone = localStorage.getItem('resqlink_ice_phone') || '0917-888-1234';
 
       const contacts = [
@@ -4054,7 +4055,7 @@
         },
         {
           id: 'ICE-02',
-          name: 'Carlos Dela Cruz',
+          name: 'Secondary Emergency Contact',
           category: 'CONTACTS',
           categoryLabel: 'Trusted Contact',
           catColor: '#8B5CF6',

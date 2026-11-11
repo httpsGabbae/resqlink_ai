@@ -42,16 +42,16 @@ class SessionManager(context: Context) {
 
     private fun loadSession(): UserProfile {
         val isLoggedIn = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
-        val displayName = prefs.getString(KEY_DISPLAY_NAME, "Juan Dela Cruz") ?: "Juan Dela Cruz"
-        val email = prefs.getString(KEY_EMAIL, "juan.delacruz@gmail.com") ?: ""
+        val displayName = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
+        val email = prefs.getString(KEY_EMAIL, "") ?: ""
         val photoUrl = prefs.getString(KEY_PHOTO_URL, null)
         val isGuest = prefs.getBoolean(KEY_IS_GUEST, false)
 
-        val bloodType = prefs.getString(KEY_BLOOD_TYPE, "O+") ?: "O+"
-        val allergies = prefs.getString(KEY_ALLERGIES, "Penicillin") ?: "Penicillin"
-        val medicalNotes = prefs.getString(KEY_MEDICAL_NOTES, "Asthmatic • Inhaler in bag") ?: "Asthmatic • Inhaler in bag"
-        val contactName = prefs.getString(KEY_PRIMARY_CONTACT_NAME, "Maria Dela Cruz") ?: "Maria Dela Cruz"
-        val contactPhone = prefs.getString(KEY_PRIMARY_CONTACT_PHONE, "0917-888-1234") ?: "0917-888-1234"
+        val bloodType = prefs.getString(KEY_BLOOD_TYPE, "") ?: ""
+        val allergies = prefs.getString(KEY_ALLERGIES, "") ?: ""
+        val medicalNotes = prefs.getString(KEY_MEDICAL_NOTES, "") ?: ""
+        val contactName = prefs.getString(KEY_PRIMARY_CONTACT_NAME, "") ?: ""
+        val contactPhone = prefs.getString(KEY_PRIMARY_CONTACT_PHONE, "") ?: ""
         val priorityName = prefs.getString(KEY_CALL_PRIORITY, CallPriority.LOCAL_HOTLINE.name) ?: CallPriority.LOCAL_HOTLINE.name
         val callPriority = try {
             CallPriority.valueOf(priorityName)

@@ -164,11 +164,11 @@ export function AndroidMockup({
                 </div>
                 <div className="bg-[#081226] p-2.5 rounded-xl border border-[#263964] space-y-1.5 text-xs">
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-[#94A3B8]">Maria Dela Cruz (Mom)</span>
+                    <span className="text-[#94A3B8]">Primary Emergency Contact</span>
                     <span className="text-[#10B981] font-medium">SMS Sent ✓</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
-                    <span className="text-[#94A3B8]">Juan Dela Cruz Jr. (Brother)</span>
+                    <span className="text-[#94A3B8]">Secondary ICE Contact</span>
                     <span className="text-[#10B981] font-medium">SMS Sent ✓</span>
                   </div>
                   <div className="pt-1 border-t border-[#263964] text-[10px] text-[#94A3B8]">

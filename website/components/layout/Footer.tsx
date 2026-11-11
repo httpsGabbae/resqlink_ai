@@ -23,17 +23,17 @@ export function Footer() {
                 <span className="block text-[#98A2B3] text-[10px]">National</span>
                 <span className="font-bold text-white text-sm">911</span>
               </a>
+              <a href="tel:117" className="bg-[#17212D] hover:bg-[#D62839] transition-colors p-2.5 rounded-lg border border-[#3D4A59] text-center">
+                <span className="block text-[#98A2B3] text-[10px]">PNP Police</span>
+                <span className="font-bold text-white text-sm">117</span>
+              </a>
               <a href="tel:143" className="bg-[#17212D] hover:bg-[#D62839] transition-colors p-2.5 rounded-lg border border-[#3D4A59] text-center">
                 <span className="block text-[#98A2B3] text-[10px]">Red Cross</span>
-                <span className="font-bold text-white text-sm">143</span>
+                <span className="font-bold text-white text-sm">143 / 8527-000</span>
               </a>
-              <a href="tel:0284260219" className="bg-[#17212D] hover:bg-[#D62839] transition-colors p-2.5 rounded-lg border border-[#3D4A59] text-center">
-                <span className="block text-[#98A2B3] text-[10px]">Fire (BFP)</span>
-                <span className="font-bold text-white text-sm">8426-0219</span>
-              </a>
-              <a href="tel:136" className="bg-[#17212D] hover:bg-[#D62839] transition-colors p-2.5 rounded-lg border border-[#3D4A59] text-center">
-                <span className="block text-[#98A2B3] text-[10px]">MMDA</span>
-                <span className="font-bold text-white text-sm">136</span>
+              <a href="tel:16502" className="bg-[#17212D] hover:bg-[#D62839] transition-colors p-2.5 rounded-lg border border-[#3D4A59] text-center">
+                <span className="block text-[#98A2B3] text-[10px]">DPWH Roads</span>
+                <span className="font-bold text-white text-sm">165-02</span>
               </a>
             </div>
           </div>
