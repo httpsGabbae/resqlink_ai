@@ -817,7 +817,7 @@ fun GoogleMapWithRadarOverlay(
                 )
                 Spacer(modifier = Modifier.width(3.dp))
                 Text(
-                    text = "RADAR • 5KM ACTIVE",
+                    text = "RADAR • 2.5KM ACTIVE",
                     color = Color(0xFF38BDF8),
                     fontSize = 7.sp,
                     fontWeight = FontWeight.ExtraBold
@@ -994,7 +994,7 @@ fun TwoCardLocationGrid(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = "Full 5km Map",
+                                    text = "Full 2.5km Map",
                                     color = TextPearl,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold

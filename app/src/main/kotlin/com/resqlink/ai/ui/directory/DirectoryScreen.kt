@@ -81,7 +81,7 @@ fun DirectoryScreen(
             if (nearestHotlinesList.isNotEmpty()) {
                 nearestHotlinesList
             } else {
-                allHotlinesList.filter { (it.distanceKm ?: 999.0) <= 5.0 }
+                allHotlinesList.filter { (it.distanceKm ?: 999.0) <= 2.5 }
             }
         } else {
             allHotlinesList
@@ -119,14 +119,14 @@ fun DirectoryScreen(
             ) {
                 Column {
                     Text(
-                        text = "5km Local Hotlines",
+                        text = "2.5km Local Hotlines",
                         fontWeight = FontWeight.Black,
                         color = TextPearl,
                         fontSize = 22.sp,
                         letterSpacing = 0.5.sp
                     )
                     Text(
-                        text = currentDeviceLocation?.address?.let { "Near $it" } ?: "Philippine local emergency stations within 5km",
+                        text = currentDeviceLocation?.address?.let { "Near $it" } ?: "Philippine local emergency stations within 2.5km",
                         fontSize = 11.sp,
                         color = TextMuted,
                         maxLines = 1,
@@ -199,7 +199,7 @@ fun DirectoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CategoryChip(
-                    title = "All (5km)",
+                    title = "All (2.5km)",
                     selected = selectedFilterCategory == null,
                     onClick = { selectedFilterCategory = null }
                 )
@@ -349,7 +349,7 @@ fun AiScannerControlCard(
 
                 Column {
                     Text(
-                        text = if (isScanning) "Gemini AI Scanning 5km..." else "5km AI Station Scanner",
+                        text = if (isScanning) "Gemini AI Scanning 2.5km..." else "2.5km AI Station Scanner",
                         fontWeight = FontWeight.Bold,
                         color = TextPearl,
                         fontSize = 13.sp

@@ -137,7 +137,7 @@ fun MapScreen(
     val localLeafletCss = remember { LeafletAssetLoader.getCss(context) }
     val localLeafletJs = remember { LeafletAssetLoader.getJs(context) }
 
-    // STRICT RADIUS FILTER: Only include stations that are within the 5.0km defense zone!
+    // STRICT RADIUS FILTER: Only include stations that are within the 2.5km defense zone!
     // All other stations remain safely stored in the database and are not dumped on the map.
     val stationsWithinDefenseRadius = remember(allHotlinesList, nearestHotlinesList, userLatitude, userLongitude) {
         val allCombined = (nearestHotlinesList + allHotlinesList).distinctBy { it.id }
@@ -145,7 +145,7 @@ fun MapScreen(
             val distKm = station.distanceKm ?: calculateHaversineDistanceKm(
                 userLatitude, userLongitude, station.latitude, station.longitude
             )
-            if (distKm <= 5.0) {
+            if (distKm <= 2.5) {
                 station.copy(distanceKm = round(distKm * 10.0) / 10.0)
             } else {
                 null
@@ -359,7 +359,7 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "5km Defense Zone • ${stationsWithinDefenseRadius.size} in range",
+                            text = "2.5km Defense Zone • ${stationsWithinDefenseRadius.size} in range",
                             color = Color(0xFFF8FAFC),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -456,13 +456,13 @@ fun MapTopBar(
 
                 Column {
                     Text(
-                        text = "5km Emergency Map",
+                        text = "2.5km Emergency Map",
                         color = Color(0xFFF8FAFC),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        text = "$userAddress • $stationCountInRadius station(s) within 5km",
+                        text = "$userAddress • $stationCountInRadius station(s) within 2.5km",
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
@@ -612,7 +612,7 @@ fun MapBottomDrawer(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "DISCOVERED IN 5KM DEFENSE ZONE (${hotlines.size})",
+                        text = "DISCOVERED IN 2.5KM DEFENSE ZONE (${hotlines.size})",
                         color = Color(0xFF94A3B8),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -648,7 +648,7 @@ fun MapBottomDrawer(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "0 stations within 5km of GPS location",
+                                    text = "0 stations within 2.5km of GPS location",
                                     color = TextPearl,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
@@ -1131,10 +1131,14 @@ fun generateLeafletMapHtml(
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         
-        /* Custom category pin styling */
-        .custom-cat-pin {
+        /* Remove all default Leaflet icon borders and white backgrounds */
+        .leaflet-div-icon,
+        .leaflet-marker-icon.leaflet-div-icon,
+        .custom-cat-pin,
+        .user-pulse-marker {
           background: transparent !important;
           border: none !important;
+          box-shadow: none !important;
         }
         
         /* Dark Popups */
@@ -1177,26 +1181,28 @@ fun generateLeafletMapHtml(
           border: none !important;
         }
         .user-pulse-dot {
-          width: 14px;
-          height: 14px;
+          width: 16px;
+          height: 16px;
+          margin: 2px;
           background: #10B981;
-          border: 2px solid #FFFFFF;
+          border: 2.5px solid #FFFFFF;
           border-radius: 50%;
-          box-shadow: 0 0 14px #10B981;
+          box-shadow: 0 0 16px #10B981, 0 2px 6px rgba(0,0,0,0.6);
         }
         .user-pulse-ring {
           position: absolute;
-          top: -8px;
-          left: -8px;
-          width: 30px;
-          height: 30px;
+          top: -10px;
+          left: -10px;
+          width: 40px;
+          height: 40px;
           border-radius: 50%;
-          border: 2px solid #10B981;
+          border: 2.5px solid #10B981;
           animation: mapPulse 1.8s infinite ease-out;
+          pointer-events: none;
         }
         @keyframes mapPulse {
-          0% { transform: scale(0.5); opacity: 1; }
-          100% { transform: scale(1.8); opacity: 0; }
+          0% { transform: scale(0.4); opacity: 1; }
+          100% { transform: scale(1.6); opacity: 0; }
         }
         
         /* Range Ring Tooltips */
@@ -1238,7 +1244,7 @@ fun generateLeafletMapHtml(
               attributionControl: false,
               minZoom: 10,
               maxZoom: 19
-            }).setView([userLat, userLng], 14);
+            }).setView([userLat, userLng], 15);
 
             window.resqMap = map;
 
@@ -1270,7 +1276,7 @@ fun generateLeafletMapHtml(
             });
             primaryTiles.addTo(map);
 
-            // 1. Concentric Range Rings: 1km and 3km
+            // 1. Concentric Range Rings: 1km inner perimeter
             L.circle([userLat, userLng], {
               radius: 1000,
               color: '#38BDF8',
@@ -1279,55 +1285,63 @@ fun generateLeafletMapHtml(
               fill: false
             }).addTo(map).bindTooltip("1km", { permanent: true, direction: "top", className: "ring-label" });
 
+            // 2. 2.5km Radius Defense Perimeter (Outer Boundary)
             L.circle([userLat, userLng], {
-              radius: 3000,
-              color: '#38BDF8',
-              weight: 1.5,
-              dashArray: '6, 6',
-              fill: false
-            }).addTo(map).bindTooltip("3km", { permanent: true, direction: "top", className: "ring-label" });
-
-            // 2. 5km Radius Defense Perimeter (Outer Boundary)
-            L.circle([userLat, userLng], {
-              radius: 5000,
+              radius: 2500,
               color: '#E53935',
               weight: 2,
               dashArray: '6, 6',
               fillColor: '#E53935',
               fillOpacity: 0.08
-            }).addTo(map).bindTooltip("5km Defense Zone", { permanent: true, direction: "top", className: "ring-label" });
+            }).addTo(map).bindTooltip("2.5km Defense Zone", { permanent: true, direction: "top", className: "ring-label" });
 
             // 3. User Radar Beacon Marker
             const userIcon = L.divIcon({
               className: 'user-pulse-marker',
               html: '<div class="user-pulse-ring"></div><div class="user-pulse-dot"></div>',
-              iconSize: [14, 14],
-              iconAnchor: [7, 7]
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+              popupAnchor: [0, -14]
             });
 
             L.marker([userLat, userLng], { icon: userIcon, zIndexOffset: 1000 })
               .addTo(map)
               .bindPopup('<div class="popup-title">Your GPS Location</div><div class="popup-dist">' + userAddress + '</div>');
 
-            // 4. Helper to create category SVG icon
-            function createCategoryPin(color, emoji) {
-              const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">' +
-                '<path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.73-6.27-14-14-14z" fill="' + color + '" stroke="#FFFFFF" stroke-width="1.5"/>' +
-                '<text x="14" y="18" font-size="12" text-anchor="middle" dominant-baseline="central">' + emoji + '</text>' +
+            // 4. Helper to create category SVG icon with high-contrast vector symbols
+            function createCategoryPin(pinColor, iconSvg) {
+              const filterId = 'sh-' + pinColor.replace('#', '');
+              const svg = 
+                '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">' +
+                '  <defs>' +
+                '    <filter id="' + filterId + '" x="-20%" y="-20%" width="140%" height="140%">' +
+                '      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.65"/>' +
+                '    </filter>' +
+                '  </defs>' +
+                '  <g filter="url(#' + filterId + ')">' +
+                '    <!-- Teardrop Pin Body -->' +
+                '    <path d="M17 1 C8.16 1 1 8.16 1 17 C1 28.5 17 43 17 43 C17 43 33 28.5 33 17 C33 8.16 25.84 1 17 1 Z" fill="' + pinColor + '" stroke="#FFFFFF" stroke-width="2"/>' +
+                '    <!-- Inner White Badge -->' +
+                '    <circle cx="17" cy="17" r="10.5" fill="#FFFFFF"/>' +
+                '    <!-- Category Vector Icon -->' +
+                '    <g transform="translate(7, 7)">' + iconSvg + '</g>' +
+                '  </g>' +
                 '</svg>';
+
               return L.divIcon({
                 className: 'custom-cat-pin',
                 html: svg,
-                iconSize: [28, 36],
-                iconAnchor: [14, 36],
-                popupAnchor: [0, -32]
+                iconSize: [34, 44],
+                iconAnchor: [17, 43],
+                popupAnchor: [0, -42]
               });
             }
 
-            const iconHospital = createCategoryPin('#E53935', '🏥');
-            const iconPolice = createCategoryPin('#2563EB', '👮');
-            const iconFire = createCategoryPin('#EA580C', '🚒');
-            const iconBarangay = createCategoryPin('#059669', '🏛️');
+            // Bold vector paths (20x20 viewBox space)
+            const iconHospital = createCategoryPin('#E53935', '<path d="M7.5 2h5v5h5v5h-5v5h-5v-5h-5v-5h5z" fill="#E53935"/>');
+            const iconPolice = createCategoryPin('#2563EB', '<path d="M10 2l-7 3v6c0 5 3.5 8 7 9 3.5-1 7-4 7-9V5l-7-3z" fill="#2563EB"/><circle cx="10" cy="10" r="2.3" fill="#FFFFFF"/>');
+            const iconFire = createCategoryPin('#EA580C', '<path d="M10 2c.8 2.5-1.2 4.2-1.2 6.2 0 2 1.3 3.3 1.3 3.3s2.5-1.3 2.5-3.8c1.8 1.8 2.4 4.3 1.8 6.2-.6 1.8-2.4 3.1-4.4 3.1-2.8 0-5-2.2-5-5 0-3.1 2.5-5.6 5-10z" fill="#EA580C"/>');
+            const iconBarangay = createCategoryPin('#059669', '<path d="M10 3l-8 4v2h16V7l-8-4zM4 11h2v5H4zm5 0h2v5H9zm5 0h2v5h-2zM2 17h16v2H2z" fill="#059669"/>');
 
             const markers = [];
 

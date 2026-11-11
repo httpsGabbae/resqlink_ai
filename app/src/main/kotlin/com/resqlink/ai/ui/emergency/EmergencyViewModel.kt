@@ -264,7 +264,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                 val currentNearbyStations = emergencyRepository.getNearestHotlines(
                     freshLocationSnapshot.latitude,
                     freshLocationSnapshot.longitude,
-                    radiusKm = 5.0
+                    radiusKm = 2.5
                 )
                 _nearestHotlines.value = currentNearbyStations
 
@@ -302,7 +302,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
                         sessionManager.setLastAiScanTime(currentTimeMillis)
                         _lastAiScanTime.value = currentTimeMillis
                     }
-                    _nearestHotlines.value = emergencyRepository.getNearestHotlines(targetLocation.latitude, targetLocation.longitude, radiusKm = 5.0)
+                    _nearestHotlines.value = emergencyRepository.getNearestHotlines(targetLocation.latitude, targetLocation.longitude, radiusKm = 2.5)
                     _allHotlines.value = emergencyRepository.getAllHotlines()
                 }
             } catch (exception: Exception) {
@@ -318,7 +318,7 @@ class EmergencyViewModel(application: Application) : AndroidViewModel(applicatio
             emergencyRepository.setPinnedHotline(hotline.id, !hotline.isPinned)
             val currentLocationSnapshot = _currentLocation.value
             if (currentLocationSnapshot != null) {
-                _nearestHotlines.value = emergencyRepository.getNearestHotlines(currentLocationSnapshot.latitude, currentLocationSnapshot.longitude, radiusKm = 5.0)
+                _nearestHotlines.value = emergencyRepository.getNearestHotlines(currentLocationSnapshot.latitude, currentLocationSnapshot.longitude, radiusKm = 2.5)
             }
             _allHotlines.value = emergencyRepository.getAllHotlines()
         }

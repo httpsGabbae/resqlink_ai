@@ -313,7 +313,7 @@ class HotlineDatabaseHelper(context: Context) : SQLiteOpenHelper(
     fun findNearestHotlinesWithinRadius(
         userLatitude: Double,
         userLongitude: Double,
-        maxRadiusKilometers: Double = 5.0
+        maxRadiusKilometers: Double = 2.5
     ): List<Hotline> {
         // Step 1: Search within primary radius
         val primaryCandidates = queryStationsWithinRadius(userLatitude, userLongitude, maxRadiusKilometers + 1.5)

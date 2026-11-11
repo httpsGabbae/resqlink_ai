@@ -19,10 +19,10 @@ interface EmergencyRepository {
      *
      * @param latitude The user's live latitude coordinate.
      * @param longitude The user's live longitude coordinate.
-     * @param radiusKm The maximum search radius in kilometers (defaults to 5.0 km).
+     * @param radiusKm The maximum search radius in kilometers (defaults to 2.5 km).
      * @return List of matching hotlines, sorted by distance from nearest to furthest.
      */
-    suspend fun getNearestHotlines(latitude: Double, longitude: Double, radiusKm: Double = 5.0): List<Hotline>
+    suspend fun getNearestHotlines(latitude: Double, longitude: Double, radiusKm: Double = 2.5): List<Hotline>
 
     /**
      * Retrieves the complete catalog of all pre-seeded offline hotlines stored in the database.

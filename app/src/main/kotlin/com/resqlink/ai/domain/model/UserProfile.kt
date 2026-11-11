@@ -11,7 +11,7 @@ package com.resqlink.ai.domain.model
  * - [FAMILY_FIRST]: Calls the user's primary trusted family member or emergency contact.
  */
 enum class CallPriority(val id: String, val title: String, val description: String) {
-    LOCAL_HOTLINE("LOCAL_HOTLINE", "Nearest Local Station First", "Direct auto-call to nearest 5km DRRMO, police, or rescue station"),
+    LOCAL_HOTLINE("LOCAL_HOTLINE", "Nearest Local Station First", "Direct auto-call to nearest 2.5km DRRMO, police, or rescue station"),
     UNIVERSAL_911("UNIVERSAL_911", "Universal 911 First", "Directly dials national 911 emergency dispatch"),
     FAMILY_FIRST("FAMILY_FIRST", "Primary Contact First", "Immediately auto-dials your designated primary emergency contact")
 }

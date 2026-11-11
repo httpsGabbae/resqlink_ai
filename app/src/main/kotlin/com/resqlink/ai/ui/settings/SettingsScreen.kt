@@ -635,7 +635,7 @@ fun CallPrioritySubSectionView(
                 // Option 1: Nearest Local Station
                 CallPriorityOptionCard(
                     title = "Nearest Local Station First (Recommended)",
-                    description = "Direct cellular auto-call to nearest 5km DRRMO, police, or rescue station with zero clicks.",
+                    description = "Direct cellular auto-call to nearest 2.5km DRRMO, police, or rescue station with zero clicks.",
                     isSelected = currentPriority == CallPriority.LOCAL_HOTLINE,
                     badge = "Fastest",
                     onClick = { onSelectPriority(CallPriority.LOCAL_HOTLINE) }
@@ -1026,7 +1026,7 @@ fun PermissionsSubSectionView(context: android.content.Context, hasLocation: Boo
             Text("These permissions are required for offline emergency operation.", color = TextMuted, fontSize = 11.sp)
 
             PermissionItemRow("Microphone (RECORD_AUDIO)", "Evaluated on-device, zero internet upload.", true)
-            PermissionItemRow("Precise Location (ACCESS_FINE_LOCATION)", "Locates nearest 5km station.", hasLocation)
+            PermissionItemRow("Precise Location (ACCESS_FINE_LOCATION)", "Locates nearest 2.5km station.", hasLocation)
             PermissionItemRow("Phone Calls (CALL_PHONE)", "Programmatically connects you to local hotlines.", true)
             PermissionItemRow("Background SMS (SEND_SMS)", "Dispatches emergency coordinates to family.", true)
 
@@ -1171,7 +1171,7 @@ fun GuardianAiSubSectionView(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("5km Hotline AI Engine", color = TextPearl, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("2.5km Hotline AI Engine", color = TextPearl, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Surface(
@@ -1190,7 +1190,7 @@ fun GuardianAiSubSectionView(
                 }
 
                 Text(
-                    text = "Powers the 2-hour periodic scan that discovers real Philippine Barangay halls, PNP precincts, and 24/7 emergency rooms within 5km of your live GPS coordinates.",
+                    text = "Powers the 2-hour periodic scan that discovers real Philippine Barangay halls, PNP precincts, and 24/7 emergency rooms within 2.5km of your live GPS coordinates.",
                     color = TextMuted,
                     fontSize = 11.sp,
                     lineHeight = 16.sp

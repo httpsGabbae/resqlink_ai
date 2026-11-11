@@ -46,7 +46,7 @@ import com.resqlink.ai.ui.theme.ResQLinkAITheme
  */
 enum class ResQTab(val title: String, val icon: ImageVector) {
     SOS("Emergency", Icons.Default.Warning),
-    MAP("5km Map", Icons.Default.Map),
+    MAP("2.5km Map", Icons.Default.Map),
     DIRECTORY("Hotlines", Icons.Default.LocalHospital),
     CONTACTS("Contacts", Icons.Default.ContactPhone)
 }
